@@ -174,6 +174,37 @@ Prompt ambiguity
 
 ---
 
+## 5.1 EvoCode-Bench — 실제 verifier leak로 결과 전체를 재실행한 사례
+
+출처:
+
+- EvoCode-Bench
+- https://github.com/UniPat-AI/EvoCodeBench
+- 2026
+
+EvoCode-Bench 프로젝트는 2026-06-20 다음 문제를 수정하고 benchmark 전체를 다시 실행했다.
+
+- Harbor shared multi-step verifier mode의 evaluation-integrity leak
+- contaminated task 1개
+- task/test defect 11개
+
+프로젝트는 그 이전 leaderboard, per-task results, trajectories를 superseded로 명시한다.
+
+### 의미
+
+이것은 verifier validity가 이론적인 문제가 아니라는 매우 직접적인 사례다.
+
+Agent가 grader를 의도치 않게 볼 수 있는 execution harness 문제 하나만으로도:
+
+- Agent behavior
+- score
+- leaderboard
+- trajectory analysis
+
+전체가 오염될 수 있다.
+
+따라서 우리 실험에서도 **verifier source뿐 아니라 verifier visibility와 execution isolation**을 audit해야 한다.
+
 ## 6. PAIChecker — Issue와 PR이 정말 같은 문제를 푸는가
 
 출처:
