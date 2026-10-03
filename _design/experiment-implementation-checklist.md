@@ -117,8 +117,13 @@ Variant 보다 먼저 쓴다. 과제 문구도 이 단계에서 먼저 고정한
 - [x] 기록용 hook: `PreToolUse` · `PostToolUse` · `PostToolUseFailure` 입력에 기록 시각을 붙여 `hooks.jsonl` 에 추가. Bash 명령이 끝날 때마다(실패 포함) 그 명령 시작 이후 수정된 시험 결과 파일만 작업 디렉터리 루트 기준으로 복사(설계 §14.3)
   - 완료 조건: hook 이 표준 출력에 아무것도 쓰지 않고 항상 exit 0
 - [x] stream 수신 시각 기록: 원본 줄을 바꾸지 않고 줄마다 수신 시각을 별도 파일에 쓴다(실행 계약 §8.4)
-- [ ] 빈 저장소로 pilot 1회
+- [x] 빈 저장소로 pilot 1회
   - 완료 조건: `runs/<run_id>/` 에 harness 가 만드는 파일(`run.json`, `result.json`, `raw/agent/stdout.jsonl`, 세션 기록, hook 기록, `artifacts/final.patch`)이 생긴다(실행 계약 §8.2). `verify.json`, `grading.json`, `metrics.json`, `review.json` 은 4 · 7단계 이후에 생기므로 이 단계의 조건이 아니다
+  - 결과(2026-10-03, `pilot-1`, 실행 `20261003T111425Z-76dfd6`, harness `ed6501f`): source 는 결과 root 의 README 1개 저장소(`a092482`), 과제 `pilot`. `completed`, `agent_succeeded`, Agent 6.7초, Bash 2회, turn 3, 계산 비용 USD 0.061, 최종 diff 는 README 첫 줄 1줄 변경. 위 파일이 모두 생겼다
+  - 확인: 인증 `oauth_token`(`apiKeySource: none`), 관찰 모델 `claude-opus-5-5` 하나, stream 의 init · `tool_use` · result 해석(해석 실패 줄 0), hook 기록(Pre · Post 각 2건, `cwd` `/work/shop-admin`), 컨테이너 events(create · attach · start · die · destroy), VM 재시작 없음, 원본에 `sk-ant-` 0건, 도구 목록에 `WebSearch` · `WebFetch` 없음
+  - 사용자 전역 설정: init 의 skill · agent · plugin 은 CLI 내장 항목뿐이고 사용자 skill · 전역 `CLAUDE.md` · MCP 는 없다. 세션 기록의 `CLAUDE.md` · `variant` 문자열은 CLI 내장 도구 설명문이다. 설정 디렉터리에 계정 정책(`policy-limits.json`)과 빈 `remote-settings.json` 이 내려받아진다
+  - 이번 pilot 으로 확인하지 못한 것(실행 계약 §10): `--max-budget-usd` 적용, 사용 한도 도달 형식, API 재시도 메시지 형식, subagent 모델, `PostToolUseFailure` 실제 호출(실패한 명령 없음), 401 · 403 형식
+  - 발견: (1) 시작 시 host load average 27.48. (2) 도구 목록에 컨테이너 밖에서 계정 범위로 동작하는 도구(`RemoteTrigger`, `ListAgents`, `SendMessage`, `CronCreate` · `CronDelete` · `CronList`, `ScheduleWakeup`, `Workflow`)가 있다. 처리는 사용자 결정 대기
 
 다음 단계 진입 조건: 위 pilot 결과 파일이 있고, 사용자 전역 설정(전역 `CLAUDE.md`, skill, MCP)이 세션 기록에 나타나지 않는다.
 
