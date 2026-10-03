@@ -1,0 +1,15 @@
+{
+  "name": "shop-admin-grading",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.6",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "24.19.1",
+    "typescript": "6.0.3"
+  }
+}

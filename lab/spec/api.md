@@ -44,6 +44,7 @@
 | `METHOD_NOT_ALLOWED` | 405 | 지원하지 않는 요청 방식입니다. |
 | `INTERNAL_ERROR` | 500 | 서버 오류가 발생했습니다. |
 
+오류 응답 본문은 `code`, `message` 두 필드만 둔다.
 `NOT_FOUND`, `METHOD_NOT_ALLOWED` 는 정의하지 않은 `/api/**` 경로와 method 에, `INTERNAL_ERROR` 는 예상하지 못한 예외에 쓴다.
 경로의 ID 가 숫자가 아니면 모든 endpoint 에서 400 `VALIDATION_FAILED` 다. 아래 표의 오류 열에는 따로 적지 않는다.
 

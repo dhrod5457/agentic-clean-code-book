@@ -68,14 +68,14 @@
 
 Variant 보다 먼저 쓴다. 과제 문구도 이 단계에서 먼저 고정한다. 과제별 채점이 문구의 경로 · 열 · 조건 · 메뉴 이름을 쓰기 때문이다.
 
-- [ ] 과제 문구: `lab/tasks/exp1/prompt.md`, `lab/tasks/exp2/<T2-ID>/prompt.md`(8개), `lab/tasks/exp3/prompt.md`. 설계 §8 의 공통 문구 형식
+- [x] 과제 문구: `lab/tasks/exp1/prompt.md`, `lab/tasks/exp2/<T2-ID>/prompt.md`(8개), `lab/tasks/exp3/prompt.md`. 설계 §8 의 공통 문구 형식
   - 완료 조건: 두 Variant 에 같은 파일을 쓴다. 문구에 Variant 를 구분하는 표현이 없다
   - 완료 조건: 실험 2 문구마다 화면 이름, API 경로, 응답 필드, 표시 열, 조건 경계, 메뉴 그룹 · 이름, 권한이 있다. 조건 경계에는 T2-O2 결제 금액의 배송비 포함 여부, T2-O1 에서 이미 기한이 지난 결제 대기 주문의 포함 여부, T2-R2 의 부분 환불 판별 기준을 적는다
-- [ ] Playwright 프로젝트, `request` 로 API 시험, browser 로 화면 시험. 화면 요소는 role 과 `ui.md` 의 이름으로 찾는다
-- [ ] 기본 동작 시험: `scenarios.md` 의 ID 마다 1개 이상. HTTP · 화면으로 확인할 수 없는 시나리오(예: 기준 변경 후 기존 주문 배송비 불변)는 `scenarios.md` 에 숨김 채점 제외와 이유를 적는다
-- [ ] 화면 시험: 화면 9개 진입, 쓰기 버튼 권한별 노출, 쓰기 API 권한별 403
-- [ ] 과제별 채점: `lab/grading/tasks/exp1/`, `lab/grading/tasks/exp2/<T2-ID>/`, `lab/grading/tasks/exp3/` (설계 §8 의 채점 항목)
-- [ ] 실행 스크립트: Variant 디렉터리를 받아 jar build, frontend build, 한 port 로 기동, 채점 실행, 종료
+- [x] Playwright 프로젝트, `request` 로 API 시험, browser 로 화면 시험. 화면 요소는 role 과 `ui.md` 의 이름으로 찾는다
+- [x] 기본 동작 시험: `scenarios.md` 의 ID 마다 1개 이상. HTTP · 화면으로 확인할 수 없는 시나리오(예: 기준 변경 후 기존 주문 배송비 불변)는 `scenarios.md` 에 숨김 채점 제외와 이유를 적는다
+- [x] 화면 시험: 화면 9개 진입, 쓰기 버튼 권한별 노출, 쓰기 API 권한별 403
+- [x] 과제별 채점: `lab/grading/tasks/exp1/`, `lab/grading/tasks/exp2/<T2-ID>.spec.ts`, `lab/grading/tasks/exp3/` (설계 §8 의 채점 항목)
+- [x] 실행 스크립트: Variant 디렉터리를 받아 jar build, frontend build, 한 port 로 기동, 채점 실행, 종료
   - 완료 조건: port 를 인자로 받고, 끝나면 프로세스가 남지 않는다
 
 다음 단계 진입 조건: 채점 시험이 명세만으로 작성돼 있다(아직 대상 Variant 가 없으므로 실행은 4단계 이후).
