@@ -542,3 +542,131 @@ Hybrid scheduler가 선택한 isolation level의 정확도를 본다.
 - False Isolation: worktree/container를 선택했지만 shared 실행도 안전했음
 
 목표는 Worktree 수 자체의 최소화가 아니라 성공률을 유지하면서 불필요한 isolation cost를 줄이는 것이다.
+
+
+---
+
+## 13. Gap Closure 이후 추가 Metric
+
+20~27번 추가 조사로 기존 task execution metric을 다음 영역까지 확장한다.
+
+### 13.1 Evolution Stability
+
+단일 task의 마지막 상태가 아니라 연속 task의 변화율을 본다.
+
+- Structural Erosion Velocity
+- Follow-up Resolve Delta
+- Context Growth Rate
+- Cleanup Debt
+- Architecture Violation Persistence
+
+### 13.2 Requirement / Invariant Discovery
+
+- Implicit Requirement Recovery Rate
+- Boundary Violation Rate
+- Invariant Search Cost
+- Clarification Precision / Recall
+- Spec Drift Count
+
+### 13.3 Verifier Validity
+
+- Verifier Mutation Kill Rate
+- Requirement Coverage
+- Orphan Verifier Rate
+- Independent Oracle Agreement
+- False Rejection Review Rate
+
+중요:
+
+> test 수와 hidden test 수를 verifier quality의 proxy로 사용하지 않는다.
+
+### 13.4 Visual Feedback
+
+- State Reachability Cost
+- Visual Diagnosis Cost
+- Render-Fix Iterations
+- Visual Flake Rate
+- interaction-verified UI state coverage
+
+### 13.5 Verification Efficiency
+
+Verification Latency만으로 충분하지 않다.
+
+함께 기록:
+
+- Time to First Trustworthy Signal
+- Affected Set Ratio
+- Missed Dependency Rate
+- Regression Detection per Cost
+- Verification Amplification
+
+### 13.6 Context Trust
+
+- Protected Path Violation
+- Context Provenance Coverage
+- Security Verifier Bypass
+- Untrusted-to-Privileged Escalation
+
+실제 공격 성공률 benchmark를 이 책의 핵심 metric으로 만들지는 않는다. 저장소/harness가 품질 경계를 보호하는 정도만 본다.
+
+### 13.7 Continuity / Handoff
+
+- Handoff Recovery Time
+- Redundant Exploration
+- State Reconstruction Accuracy
+- Stale Handoff Rate
+- session reset 전후 Continuity Loss
+
+## 14. Metric 사용 원칙 보정
+
+### 14.1 절대값과 정규화 값을 같이 기록한다
+
+Architecture smell, LOC, test 수처럼 분모가 빠르게 바뀌는 metric은 density만 기록하지 않는다.
+
+예:
+
+~~~text
+smell_count
+smell_per_kloc
+new_smells
+resolved_smells
+~~~
+
+를 함께 본다.
+
+### 14.2 Metric 자체를 목표로 최적화하지 않는다
+
+낮은 files-read가 무조건 좋은 것이 아니다.
+
+필요한 invariant를 놓치고 바로 수정하면 files-read는 낮아도 실패다.
+
+따라서 과정 metric은 성공/정확성 판정과 함께 해석한다.
+
+### 14.3 시간축이 있는 metric을 분리한다
+
+v0.1 단발 A/B와 sequential evolution 실험을 섞지 않는다.
+
+- v0.1: localization/change/verification cost
+- 후속: erosion velocity/follow-up maintainability
+
+### 14.4 Verifier도 실험 대상 artifact다
+
+metric을 계산하기 전에:
+
+- reference pass
+- negative control
+- mutant kill
+- spec-verifier traceability
+
+를 확인한다.
+
+상세:
+
+- `20-iterative-structural-erosion.md`
+- `21-requirement-discoverability.md`
+- `22-verifier-validity.md`
+- `23-visual-feedback-loop.md`
+- `24-architecture-drift-and-erosion.md`
+- `25-verification-efficiency.md`
+- `26-context-trust-boundary.md`
+- `27-long-running-continuity.md`
