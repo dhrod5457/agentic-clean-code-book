@@ -123,7 +123,7 @@ Variant 보다 먼저 쓴다. 과제 문구도 이 단계에서 먼저 고정한
   - 확인: 인증 `oauth_token`(`apiKeySource: none`), 관찰 모델 `claude-opus-5-5` 하나, stream 의 init · `tool_use` · result 해석(해석 실패 줄 0), hook 기록(Pre · Post 각 2건, `cwd` `/work/shop-admin`), 컨테이너 events(create · attach · start · die · destroy), VM 재시작 없음, 원본에 `sk-ant-` 0건, 도구 목록에 `WebSearch` · `WebFetch` 없음
   - 사용자 전역 설정: init 의 skill · agent · plugin 은 CLI 내장 항목뿐이고 사용자 skill · 전역 `CLAUDE.md` · MCP 는 없다. 세션 기록의 `CLAUDE.md` · `variant` 문자열은 CLI 내장 도구 설명문이다. 설정 디렉터리에 계정 정책(`policy-limits.json`)과 빈 `remote-settings.json` 이 내려받아진다
   - 이번 pilot 으로 확인하지 못한 것(실행 계약 §10): `--max-budget-usd` 적용, 사용 한도 도달 형식, API 재시도 메시지 형식, subagent 모델, `PostToolUseFailure` 실제 호출(실패한 명령 없음), 401 · 403 형식
-  - 발견: (1) 시작 시 host load average 27.48. (2) 도구 목록에 컨테이너 밖에서 계정 범위로 동작하는 도구(`RemoteTrigger`, `ListAgents`, `SendMessage`, `CronCreate` · `CronDelete` · `CronList`, `ScheduleWakeup`, `Workflow`)가 있다. 처리는 사용자 결정 대기
+  - 발견: (1) 시작 시 host load average 27.48. (2) 도구 목록에 컨테이너 밖에서 계정 범위로 동작하는 도구(`RemoteTrigger`, `ListAgents`, `SendMessage`, `CronCreate` · `CronDelete` · `CronList`, `ScheduleWakeup`, `Workflow`)가 있다. 사용자 결정(2026-10-03): 그대로 둔다. 실행 계약 §3 의 "기본 도구 중 `WebSearch` · `WebFetch` 를 뺀 전부" 를 유지하고 두 Variant 에 같게 적용한다. 실행마다 `result.json` 의 `tool_calls.by_name` 에 사용 여부가 남으므로 분석 전에 이 도구들의 호출을 확인한다
 
 다음 단계 진입 조건: 위 pilot 결과 파일이 있고, 사용자 전역 설정(전역 `CLAUDE.md`, skill, MCP)이 세션 기록에 나타나지 않는다.
 
