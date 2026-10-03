@@ -146,6 +146,7 @@ Agent에게 매 edit마다 L4를 요구하면 feedback loop가 느려진다.
 출처:
 
 - Predictive Test Selection Without Historical Failure Data
+- https://conf.researchr.org/details/icsme-2026/icsme-2026-industry-track/14/Predictive-Test-Selection-Without-Historical-Failure-Data
 - ICSME 2026 Industry
 
 이 연구는 historical failure label이 충분하지 않은 환경을 다룬다.
