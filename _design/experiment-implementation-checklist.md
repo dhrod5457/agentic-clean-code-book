@@ -24,12 +24,14 @@
 
 설계 §19.2 에 해당한다. 1 ~ 2단계와 병행할 수 있고, **3단계 진입 전에 완료**한다.
 
-- [ ] Claude 모델과 effort. 모델 학습 기준일과 설계 §3.4 의 major 출시일 관계를 함께 적는다
-- [ ] 실행당 · 전체 예산
-- [ ] 실행 기계(이 Mac 의 Docker 또는 Linux 노드)
-- [ ] API 인증 방식(실험 전용 key, 예산 한도, 컨테이너에 넣는 방법)
-- [ ] 원본 로그 보관 위치
-  - 완료 조건(5개 공통): 설계 §19.2 표의 상태 열에 결정 내용과 날짜가 적혀 있다
+- [x] Claude 모델과 effort. 모델 학습 기준일과 설계 §3.4 의 major 출시일 관계를 함께 적는다
+- [x] 실행당 · 전체 예산
+- [x] 실행 기계(이 Mac 의 Docker 또는 Linux 노드)
+- [x] API 인증 방식(실험 전용 key, 예산 한도, 컨테이너에 넣는 방법)
+- [x] 원본 로그 보관 위치
+- [x] timeout, retry, 병렬 실행, 실행 환경 고정 방법
+  - 결정 위치: `_design/experiment-execution-contract-v0.1.md`(실행 계약). 설계 §19.2 는 각 항목의 결정 요약과 실행 계약 절을 가리킨다
+  - 완료 조건(공통): 설계 §19.2 표의 상태 열에 결정 내용과 날짜가 적혀 있다
 
 ---
 
@@ -85,7 +87,14 @@ Variant 보다 먼저 쓴다. 과제 문구도 이 단계에서 먼저 고정한
 
 ## 3. Harness 골격 (`lab/harness/`)
 
-진입 조건: 0B 완료.
+진입 조건: 0B 완료. 설계와 실행 계약이 FROZEN.
+
+- [ ] harness 골격: 실행 단위(입력 spec), 실행 상태 모델, `run.json` · `result.json`, environment fingerprint, 채점 adapter, 재실행, 실험 잠금(실행 계약 §6 ~ §9)
+  - 완료 조건: 실제 Claude 호출 없이 가짜 process 로 정상 종료, Agent 비정상 종료, timeout, 채점 성공 · 실패, harness 내부 오류를 자동 시험으로 확인한다
+- [ ] Docker Desktop VM 메모리 20GB 이상, 실험 기간 자동 갱신 끄기(실행 계약 §4.1)
+- [ ] 컨테이너 연결 경로: workspace, 빈 `CLAUDE_CONFIG_DIR`, hook 출력, 읽기 전용 `/opt/cc/` 만 연결(실행 계약 §4.3)
+  - 완료 조건: 컨테이너 안의 환경 변수 · 연결 경로 · hostname · `/opt/cc/` 파일 내용에 `agentic`, `variant`, `실험`, `experiment`, Variant 코드가 없다
+- [ ] OOM · 외부 원인 종료 판정(`docker inspect`, `docker events`)과 재채점(`stage = after_agent` 실행을 source commit + `final.patch` 복사본으로 다시 채점, 최대 2회) (실행 계약 §6.3, §7)
 
 - [ ] 컨테이너 이미지: JDK, Node, pnpm, Playwright Chromium, 고정 글꼴, Claude Code 고정 버전, `TZ=Asia/Seoul`, `LANG=ko_KR.UTF-8`, non-root 사용자
   - 완료 조건: 이미지 digest 를 `lab/harness/image.lock` 에 기록
@@ -96,12 +105,12 @@ Variant 보다 먼저 쓴다. 과제 문구도 이 단계에서 먼저 고정한
   - 완료 조건: 내보낸 저장소에서 `agentic`, `variant`, `실험`, `experiment` 검색 결과 0건, commit 1개, `CLAUDE.md` · `AGENTS.md` · `.claude/` 없음
 - [ ] `run.sh <task> <variant> <run-id>`: clone, 의존성 offline 설치, Claude Code 실행, 결과 수집
   - 완료 조건: 실행마다 빈 `CLAUDE_CONFIG_DIR`, `--strict-mcp-config`, `--settings`(기록용 hook), `--dangerously-skip-permissions`(non-root 컨테이너와 egress 제한 조건에서만, 설계 §15.3), `--session-id`, `--output-format stream-json --verbose --include-hook-events`, `--model`, `--effort`, `--max-budget-usd`, 시간 제한 45분
-  - 완료 조건: 실행마다 빈 `GRADLE_USER_HOME` 을 만들고 이미지의 `wrapper/dists` 를 복사한다. `GRADLE_RO_DEP_CACHE` 는 읽기 전용 mount 를 가리킨다(설계 §15.2). cache 내용은 7단계에서 채운다
+  - 완료 조건: 실행마다 빈 `GRADLE_USER_HOME` 을 만들고 이미지의 `wrapper/dists` 를 복사한다. `GRADLE_RO_DEP_CACHE` 는 이미지 안 root 소유 경로를 가리킨다(설계 §15.2, 실행 계약 §4.3). cache 내용은 7단계에서 채운다
 - [ ] 기록용 hook: `PreToolUse` · `PostToolUse` 입력에 기록 시각을 붙여 `hooks.jsonl` 에 추가. 시험 명령이면 그 명령 시작 이후 수정된 시험 결과 파일만 복사(설계 §14.3)
   - 완료 조건: hook 이 표준 출력에 아무것도 쓰지 않고 항상 exit 0
-- [ ] stream 수신 시각을 각 줄에 붙이는 wrapper
+- [ ] stream 수신 시각 기록: 원본 줄을 바꾸지 않고 줄마다 수신 시각을 별도 파일에 쓴다(실행 계약 §8.4)
 - [ ] 빈 저장소로 pilot 1회
-  - 완료 조건: `results/<run-id>/` 에 harness 가 만드는 파일(`run.json`, `stream.jsonl`, `transcript.jsonl`, `hooks.jsonl`, `final.patch`)이 생긴다. `verify.json`, `grading.json`, `metrics.json`, `review.json` 은 4 · 7단계 이후에 생기므로 이 단계의 조건이 아니다
+  - 완료 조건: `runs/<run_id>/` 에 harness 가 만드는 파일(`run.json`, `result.json`, `raw/agent/stdout.jsonl`, 세션 기록, hook 기록, `artifacts/final.patch`)이 생긴다(실행 계약 §8.2). `verify.json`, `grading.json`, `metrics.json`, `review.json` 은 4 · 7단계 이후에 생기므로 이 단계의 조건이 아니다
 
 다음 단계 진입 조건: 위 pilot 결과 파일이 있고, 사용자 전역 설정(전역 `CLAUDE.md`, skill, MCP)이 세션 기록에 나타나지 않는다.
 
@@ -186,7 +195,7 @@ A 를 복사한 뒤 차이 대장(설계 §6.4)의 항목만 바꾼다. 항목�
 - [ ] 실험 3 채점의 "다른 목록 화면 4개" 기준 screenshot 을 기준 commit 에서 만들어 `lab/grading/tasks/exp3/` 에 commit 한다(바로 위의 실행 이미지에서 생성)
 - [ ] 실험 3 의 세 가지 수정 방식(열 정의 말줄임 옵션, 관리자 계정 표 열 폭, `nowrap` 전체 제거)을 임시 branch 에서 각각 적용해 채점을 통과하는지 확인한다. 통과하지 않는 방식이 있으면 설계 §8.3 의 "셋 다 통과" 서술을 고친다. 임시 branch 는 지운다
 - [ ] `lab/harness/metrics/` 에 설계 §14.4 지표 계산 스크립트
-  - 완료 조건: 입력은 `results/<run-id>/` 와 공통 경로 목록뿐이고 Variant 이름을 읽지 않는다. 공통 경로 목록은 두 Variant 의 패턴을 합친 하나의 목록이다(설계 §14.4). 이 목록을 7단계에서 만들어 `lab/tasks/common-paths.json` 에 둔다
+  - 완료 조건: 입력은 `runs/<run_id>/` 와 공통 경로 목록뿐이고 `run.json` 의 `variant` 를 읽지 않는다. 공통 경로 목록은 두 Variant 의 패턴을 합친 하나의 목록이다(설계 §14.4). 이 목록을 7단계에서 만들어 `lab/tasks/common-paths.json` 에 둔다
 - [ ] 보정 실행: 실험 과제가 아닌 보정 과제 1개(예: 관리자 계정 목록에 생성일 열 추가)를 A · B 에 1회씩 실행한다. 결과는 분석에서 뺀다
 - [ ] 분류 규칙(검색 · 읽기 · 시험 명령) 시험: 보정 실행 기록에서 손으로 센 값과 스크립트 값이 같다
   - 완료 조건: 손으로 센 표본 3개 이상, 표본과 결과를 `lab/reviews/metrics-validation.md` 에 기록
@@ -199,6 +208,7 @@ A 를 복사한 뒤 차이 대장(설계 §6.4)의 항목만 바꾼다. 항목�
 - [ ] 과제 문구는 2단계에서 고정했다. 이후 바꾸면 이유를 기록하고 과제별 채점을 같이 고친다
 - [ ] `lab/tasks/predictions.md`: 설계 §8 의 사전 등록 예측 원문
 - [ ] 통합 Agent 문구(실험 2): `lab/tasks/exp2/integrator-prompt.md`
+- [ ] 실행 순서 파일: 실험 1 · 3 의 `lab/tasks/<실험>/schedule.json` 과 실험 2 회차 순서, seed 와 생성 스크립트(실행 계약 §7.1)
 - [ ] 기준 commit 에 tag `lab-v0.1-base`
 
 다음 단계 진입 조건: tag 가 있고, tag 이후 `lab/variants/`, `lab/grading/`, `lab/tasks/`, `lab/harness/metrics/` 를 고치지 않는다.
@@ -220,7 +230,7 @@ A 를 복사한 뒤 차이 대장(설계 §6.4)의 항목만 바꾼다. 항목�
 
 - [ ] 실험 1: Variant 당 5회, A/B 순서 무작위, 한 번에 1개 실행
 - [ ] 실험 3: Variant 당 5회, A/B 순서 무작위, 한 번에 1개 실행
-- [ ] 실험 2: Variant 당 3회. 회마다 8개 동시 실행 → 28쌍 3-way merge → 순차 통합(ID 사전순, 병합마다 검증) → 숨김 채점 8개
+- [ ] 실험 2: Variant 당 3회. 회마다 8개 실행(동시 2개, 실행 계약 §4.2) → 28쌍 3-way merge → 순차 통합(ID 사전순, 병합마다 검증) → 숨김 채점 8개
 - [ ] 실행마다 `run.json` 에 Claude Code 버전, 모델, effort, 이미지 digest 가 기록돼 있다
 - [ ] 실행이 harness 오류로 끝나면 결과에서 빼지 않고 오류 실행으로 표시한 뒤 다시 실행한다
 
