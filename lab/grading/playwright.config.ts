@@ -7,6 +7,8 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
+  // run.sh 가 묶음마다 다른 위치를 준다. 실패 trace 와 진단 screenshot 이 여기에 남는다
+  outputDir: process.env.GRADING_OUTPUT_DIR ?? 'test-results',
   reporter: [['list'], ['junit', { outputFile: process.env.GRADING_JUNIT ?? 'reports/junit-grading.xml' }]],
   snapshotPathTemplate: '{testFileDir}/__screenshots__/{arg}{ext}',
   expect: { toHaveScreenshot: { maxDiffPixels: 0, animations: 'disabled' } },

@@ -75,6 +75,7 @@ Variant 보다 먼저 쓴다. 과제 문구도 이 단계에서 먼저 고정한
 - [x] 기본 동작 시험: `scenarios.md` 의 ID 마다 1개 이상. HTTP · 화면으로 확인할 수 없는 시나리오(예: 기준 변경 후 기존 주문 배송비 불변)는 `scenarios.md` 에 숨김 채점 제외와 이유를 적는다
 - [x] 화면 시험: 화면 9개 진입, 쓰기 버튼 권한별 노출, 쓰기 API 권한별 403
 - [x] 과제별 채점: `lab/grading/tasks/exp1/`, `lab/grading/tasks/exp2/<T2-ID>.spec.ts`, `lab/grading/tasks/exp3/` (설계 §8 의 채점 항목)
+- [x] 실험 3 진단: `lab/grading/diagnostics/exp3-1024.spec.ts`, 묶음 `diag-exp3-1024`. 판정에 쓰지 않는다(설계 §8.3)
 - [x] 실행 스크립트: Variant 디렉터리를 받아 jar build, frontend build, 한 port 로 기동, 채점 실행, 종료
   - 완료 조건: port 를 인자로 받고, 끝나면 프로세스가 남지 않는다
 
@@ -181,7 +182,7 @@ A 를 복사한 뒤 차이 대장(설계 §6.4)의 항목만 바꾼다. 항목�
 - [ ] 의존성 cache 를 넣은 이미지 재작성(설계 §15.2). 3단계 이미지를 기반으로 cache 층만 더해 글꼴 · Chromium 은 바꾸지 않는다. 실험 3 기준 screenshot, 보정 실행과 이후 모든 실행이 이 이미지를 쓴다
   - 완료 조건: 두 Variant 에서 `./gradlew build` 와 `pnpm install` 로 seed 한 `modules-2`(`*.lock`, `gc.properties` 제외)와 pnpm store, `wrapper/dists` 가 이미지에 있다
   - 완료 조건: `--network none` 컨테이너에서 두 Variant 의 `./gradlew test` 와 `pnpm install --offline --frozen-lockfile` 이 통과한다. 새 digest 를 `lab/harness/image.lock` 에 기록
-- [ ] 실험 3 채점 기준선: 기준 commit 의 seed 데이터로 설계 §8.3 의 버튼 위치 조건이 1280×800, 1024×768 에서 두 Variant 모두 이미 성립한다
+- [ ] 실험 3 채점 기준선: 기준 commit 의 seed 데이터로 설계 §8.3 의 버튼 위치 조건이 판정 화면 폭 1280×800 에서 두 Variant 모두 이미 성립한다. 진단 화면 폭 1024×768(묶음 `diag-exp3-1024`)의 결과는 기록만 한다
 - [ ] 실험 3 채점의 "다른 목록 화면 4개" 기준 screenshot 을 기준 commit 에서 만들어 `lab/grading/tasks/exp3/` 에 commit 한다(바로 위의 실행 이미지에서 생성)
 - [ ] 실험 3 의 세 가지 수정 방식(열 정의 말줄임 옵션, 관리자 계정 표 열 폭, `nowrap` 전체 제거)을 임시 branch 에서 각각 적용해 채점을 통과하는지 확인한다. 통과하지 않는 방식이 있으면 설계 §8.3 의 "셋 다 통과" 서술을 고친다. 임시 branch 는 지운다
 - [ ] `lab/harness/metrics/` 에 설계 §14.4 지표 계산 스크립트
