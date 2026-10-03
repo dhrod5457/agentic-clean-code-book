@@ -269,3 +269,21 @@ Clean Code만 보지 않고 다음 전통을 함께 본다.
 > **Clean Code의 시대가 끝난 것이 아니라, Clean의 단위가 코드에서 개발 시스템 전체로 확장되고 있다.**
 
 이 명제가 실제 자료와 실험을 버티는지 다음 리서치에서 검증한다.
+
+
+---
+
+## Worktree 최소화 연구 추가
+
+병렬 Agent 연구에서 다음 질문을 별도 추적한다.
+
+> Agent-friendly codebase가 충분히 독립적인 변경 경계를 제공하면 모든 edit task에 worktree를 만들지 않고, 충돌 가능성이 있는 task에만 isolation을 선택적으로 적용할 수 있는가?
+
+현재 가설:
+
+- Worktree는 file/Git state isolation을 제공하므로 코드 구조만으로 완전히 대체할 수 없다.
+- 반면 codebase의 independent change surface가 커질수록 강한 isolation이 필요한 task 비율은 줄어들 수 있다.
+- shared workspace를 안전하게 쓰려면 change ownership뿐 아니라 hermetic build/test와 중앙 Git operation이 필요하다.
+- 최종 목표는 `worktree per agent`가 아니라 `isolation level per task`를 기계적으로 선택하는 것이다.
+
+상세: `18-worktree-minimization.md`
