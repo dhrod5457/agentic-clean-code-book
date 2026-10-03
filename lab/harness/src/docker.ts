@@ -1,5 +1,6 @@
 import { execFile, spawn } from 'node:child_process';
 import { closeSync, openSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import type { ExecConfig } from './config.ts';
 import type { Probe } from './fingerprint.ts';
 
@@ -10,7 +11,8 @@ export const CONTAINER = {
   claudeConfig: '/home/agent/.claude',
   hooksOut: '/opt/cc-out',
   cc: '/opt/cc',
-  grading: '/opt/grading',
+  // 채점 디렉터리의 상위(lab/). 채점 코드가 run.sh 기준 ../spec 의 명세 · seed 를 읽는다
+  lab: '/opt/lab',
   gradingLog: '/opt/grading-log',
 } as const;
 
@@ -60,7 +62,8 @@ export function gradingRunArgs(o: {
   config: ExecConfig;
   name: string;
   workspace: string;
-  gradingDir: string;
+  // 채점 스크립트(run.sh)의 host 경로
+  script: string;
   logDir: string;
   env: Record<string, string>;
   port: number;
@@ -70,11 +73,11 @@ export function gradingRunArgs(o: {
     'run', '--name', o.name, '--entrypoint', '', '--user', 'agent', '--network', o.config.environment.grading_network,
     ...resourceFlags(o.config),
     '-v', `${o.workspace}:${CONTAINER.workspace}`,
-    '-v', `${o.gradingDir}:${CONTAINER.grading}:ro`,
+    '-v', `${path.dirname(path.dirname(o.script))}:${CONTAINER.lab}:ro`,
     '-v', `${o.logDir}:${CONTAINER.gradingLog}`,
     ...envFlags(o.env),
     o.config.environment.image!,
-    `${CONTAINER.grading}/run.sh`, CONTAINER.workspace, String(o.port), o.suite,
+    `${CONTAINER.lab}/${path.basename(path.dirname(o.script))}/${path.basename(o.script)}`, CONTAINER.workspace, String(o.port), o.suite,
   ];
 }
 

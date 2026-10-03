@@ -50,7 +50,9 @@ before(() => {
 });
 
 // 가짜 run.sh: 컨테이너 안에서 실행됐는지 남기고 통과 JUnit 을 쓴다
-const GRADER = `name="\${3//\\//-}"; id -u > "$GRADING_LOG_DIR/uid"; echo "$1" > "$GRADING_LOG_DIR/workspace"
+// 실제 채점 코드처럼 lab/spec 을 run.sh 기준 ../spec 으로 읽는다
+const GRADER = `[ -f "$(dirname "$0")/../spec/seed.sql" ] || { echo "spec 이 없다" >&2; exit 3; }
+name="\${3//\\//-}"; id -u > "$GRADING_LOG_DIR/uid"; echo "$1" > "$GRADING_LOG_DIR/workspace"
 printf '<testsuites tests="1" failures="0" errors="0" skipped="0"><testsuite name="s"><testcase name="t"/></testsuite></testsuites>' > "$GRADING_LOG_DIR/junit-$name.xml"`;
 
 function containerFixture(prompt: string, tune: (c: ExecConfig) => void = () => {}) {
@@ -64,6 +66,8 @@ function containerFixture(prompt: string, tune: (c: ExecConfig) => void = () => 
   const graderDir = path.join(tmp('grader-'), 'grading');
   mkdirSync(graderDir);
   writeScript(path.join(graderDir, 'run.sh'), GRADER);
+  mkdirSync(path.join(graderDir, '../spec'));
+  writeFileSync(path.join(graderDir, '../spec/seed.sql'), '-- seed\n');
   f.config.agent.executable = 'fake-claude';
   f.config.agent.settings_file = 'lab/harness/config/cc/settings.json';
   f.config.agent.hook_files = ['lab/harness/config/cc/record.mjs'];

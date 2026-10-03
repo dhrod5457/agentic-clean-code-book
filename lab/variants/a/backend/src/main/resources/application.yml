@@ -1,0 +1,28 @@
+spring:
+  application:
+    name: shop-admin
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+      data-locations: classpath:seed.sql
+      encoding: UTF-8
+  servlet:
+    encoding:
+      force-response: true
+  web:
+    resources:
+      add-mappings: false
+
+server:
+  port: 8080
+  servlet:
+    session:
+      tracking-modes: cookie
+      cookie:
+        http-only: true
+        same-site: strict
+
+shop:
+  clock:
+    fixed-instant: "2026-01-15T10:00:00+09:00"

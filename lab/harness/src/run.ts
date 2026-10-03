@@ -423,7 +423,7 @@ class Grader {
       env = { TZ: 'Asia/Seoul', LANG: 'ko_KR.UTF-8', GRADING_LOG_DIR: CONTAINER.gradingLog, GRADING_SKIP_BUILD: skipBuild ? '1' : '0' };
       launch = {
         cmd: 'docker',
-        args: gradingRunArgs({ config: this.config, name, workspace: this.workspace, gradingDir: path.dirname(script), logDir, env, port: this.port, suite }),
+        args: gradingRunArgs({ config: this.config, name, workspace: this.workspace, script, logDir, env, port: this.port, suite }),
         env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', ...env },
       };
     } else {

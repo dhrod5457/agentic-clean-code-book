@@ -127,7 +127,7 @@ Gradle 읽기 전용 cache(`GRADLE_RO_DEP_CACHE`)와 Playwright 브라우저는 
 
 - `run.json`, `result.json`, `raw/`, `artifacts/`, 다른 실행의 디렉터리, 이 저장소는 연결하지 않는다
 - bind mount 의 host 원본 경로는 컨테이너 안 `/proc/self/mountinfo` 에 symlink 를 푼 실제 경로로 보인다(2026-10-03 확인). 그래서 연결하는 host 경로는 모두 실행 디렉터리 아래에 둔다. settings · hook 파일도 저장소 경로를 연결하지 않고 `runs/<run_id>/container/cc/` 로 복사해 `/opt/cc` 에 연결한다. `docker` 실행에서 결과 root 의 실제 경로(`realpath`)에 금지 문자열이 있으면 harness 가 시작하지 않는다. 실제 경로에는 실행자 사용자 이름과 `lab-runs/v0.1/runs/<run_id>` 가 보이며, 금지 문자열은 아니다
-- 채점 컨테이너는 Agent 컨테이너와 같은 이미지를 `agent` 사용자로 실행하고, 채점용 복사본 · `lab/grading`(읽기 전용) · 채점 로그 디렉터리를 연결한다. Agent 가 볼 수 없으므로 연결 경로 제한을 적용하지 않는다. 네트워크는 실행 설정의 `environment.grading_network` 로 정하고 실행 조건 hash 에 들어간다. 의존성 cache 층이 생기는 체크리스트 7단계 전까지는 Variant build 를 위해 `bridge` 이고, 7단계에서 `none` 으로 바꾸며 `run.sh` 의 offline build 와 Gradle cache 환경 변수를 함께 정한다
+- 채점 컨테이너는 Agent 컨테이너와 같은 이미지를 `agent` 사용자로 실행하고, 채점용 복사본 · `lab/`(읽기 전용, 채점 코드가 `lab/spec/seed.sql` 을 읽는다) · 채점 로그 디렉터리를 연결한다. Agent 가 볼 수 없으므로 연결 경로 제한을 적용하지 않는다. 네트워크는 실행 설정의 `environment.grading_network` 로 정하고 실행 조건 hash 에 들어간다. 의존성 cache 층이 생기는 체크리스트 7단계 전까지는 Variant build 를 위해 `bridge` 이고, 7단계에서 `none` 으로 바꾸며 `run.sh` 의 offline build 와 Gradle cache 환경 변수를 함께 정한다
 - 컨테이너 이름과 hostname 은 `r-<run_id>` 다. 이미지 · 설정 · hook 파일 이름 · 경로 · 내용(주석 포함)에 실험 · Variant 를 나타내는 문자열을 쓰지 않는다
 - 3단계 컨테이너 항목의 완료 조건으로, 컨테이너 안에서 환경 변수 · 연결 경로 · hostname · `/opt/cc/` 파일 내용에 `agentic`, `variant`, `실험`, `experiment`, Variant 코드가 없는지 검사한다
 - 실행 설정의 `environment.runtime` 이 `docker` 일 때만 실제 Agent 를 실행한다. `local` 은 컨테이너 없이 host 에서 가짜 Agent 로 orchestration 을 시험할 때만 쓴다. `local` 에서는 작업 디렉터리에서 실행 디렉터리를 읽을 수 있기 때문이다
@@ -464,6 +464,7 @@ Agent 환경 값은 `docker` 실행에서 Agent 와 같은 이미지의 별도 �
 | 2026-10-03 | 컨테이너 실행 경로(연결 경로 · cc 사본 · 결과 root 경로 검사 · OOM · Docker 오류 판정), 채점 컨테이너, 기록용 hook, 재채점, 실행 명령, 내보내기 스크립트 | 체크리스트 3단계 나머지 항목 |
 | 2026-10-03 | 시작 스크립트 실패(exit 90) 분류와 DNS 를 resolver 로 한정(§4.2), hook 출력 위치 · 결과 root 실제 경로 · 채점 network 설정 · 지침 파일 검사(§4.3), 인증 확인 위치와 token 사전 확인(§4.4), image id 표기와 `docker save` 사본(§4.5), OOM 보다 구조화된 오류 우선, 외부 원인 근거 셋, 컨테이너 생성 · 시작 실패, 채점 컨테이너 시작 실패, 기록 복사 실패, 컨테이너 events 기록(§6.3), 재채점 대상과 harness 코드 규칙(§7), 이미지 ENV(§3), fingerprint 의 Docker 정보와 측정 위치(§9.1), pilot 확인 항목(§10) | 컨테이너 단계 독립 검토(§12 9차) |
 | 2026-10-03 | `docker events` 를 컨테이너 실행 전부터 받음, OOM 앞에 보는 근거를 오류 result 로 한정, VM boot id 변경을 외부 원인 근거로 추가, `other` · `signal` 사람 확인과 재분류 규칙(§7), 재채점 전 남은 컨테이너 거부와 Agent 기록 복구(§7), hook 이 명령 이름과 관계없이 새 시험 결과를 복사(설계 §14.3), 지침 파일 대소문자 무시(§3, §4.3), 상주 컨테이너 중지와 기록(§4.1, §9.1), `HOME` 문구(§3), `images/`(§8.2) | 컨테이너 단계 재확인(§12 10차) |
+| 2026-10-03 | 채점 컨테이너에 `lab/grading` 대신 `lab/` 를 읽기 전용으로 연결(§4.3) | 결함 수정. 채점 코드가 `../spec/seed.sql` 을 읽는데 연결되지 않아 모든 채점이 시험 0개로 끝났다(4단계 A 확인 중 발견). 실행 조건은 바뀌지 않는다 |
 
 ---
 

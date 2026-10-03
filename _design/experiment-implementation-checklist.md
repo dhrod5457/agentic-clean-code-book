@@ -133,22 +133,30 @@ Variant 보다 먼저 쓴다. 과제 문구도 이 단계에서 먼저 고정한
 
 ## 4. Variant A (`lab/variants/a/`)
 
-- [ ] 구현 세션 준비: 연구 문서가 없는 별도 디렉터리에 `lab/spec/` 만 복사하고(`seed-checks.sql` 은 실험 2 조회 조건을 담고 있으므로 뺀다), 지시는 "`lab/spec/` 의 명세를 `conventions.md` 에 따라 구현하라" 로 한정
-- [ ] 의존성: Gradle 선언과 `pnpm-lock.yaml` 의 직접 의존성 버전이 `lab/spec/versions.md` 와 같다. Gradle wrapper 는 9.8.0
-- [ ] backend: 설계 §7.2 구조
+- [x] 구현 세션 준비: 연구 문서가 없는 별도 디렉터리에 `lab/spec/` 만 복사하고(`seed-checks.sql` 은 실험 2 조회 조건을 담고 있으므로 뺀다), 지시는 "`lab/spec/` 의 명세를 `conventions.md` 에 따라 구현하라" 로 한정
+  - 결과(2026-10-03): 실행 이미지 컨테이너(`/work` 에 spec 사본과 빈 `shop-admin/` 만 연결, 빈 설정 디렉터리, 네트워크 열림)에서 `claude -p`(`claude-opus-5-5`, effort high)에 "`lab/spec/` 의 명세를 `conventions.md` 에 따라 `shop-admin/` 에 구현하라." 만 주었다. 20분, turn 57, 계산 비용 USD 9.13. 산출물을 build 산출물 없이 `lab/variants/a/` 로 옮겼다
+- [x] 의존성: Gradle 선언과 `pnpm-lock.yaml` 의 직접 의존성 버전이 `lab/spec/versions.md` 와 같다. Gradle wrapper 는 9.8.0
+  - 결과: wrapper 9.8.0, plugin 3개 · ArchUnit · google-java-format · frontend 직접 의존성 전부 일치. BOM 해석 결과 JUnit 6.0.3, AssertJ 3.27.7, H2 2.4.240
+- [x] backend: 설계 §7.2 구조
+  - 결과: 기준 금액 `150_000` 은 운영 코드에서 `DeliveryFeePolicy` 한 곳, `SecurityConfig` 는 영역 규칙, ArchUnit L1 · L2 는 `./gradlew test` 통과에 포함. 영역 사이 인자 · 반환값은 사람 검토에서 본다
   - 완료 조건: 무료배송 판단은 `service/DeliveryFeePolicy` 한 곳. 기준 금액 숫자가 운영 코드에 한 번만 나온다
   - 완료 조건: `SecurityConfig` 는 영역 prefix 규칙
   - 완료 조건: ArchUnit L1, L2 통과
   - 완료 조건: 영역 사이 호출이 `conventions.md` 의 방향을 따르고, 주고받는 인자와 반환값이 요약 record · enum · `Money` · ID 뿐이다(설계 §5.5, §7.3)
-- [ ] frontend: 설계 §7.5 A 구조
+- [x] frontend: 설계 §7.5 A 구조
+  - 결과: `src/app/adminRoutes.tsx` 한 표. `DataTable` 동작은 숨김 채점 `screens` 통과로 확인
   - 완료 조건: route · 메뉴 · 화면 권한이 `src/app/adminRoutes.tsx` 한 표에 있다
   - 완료 조건: 공통 `DataTable` 이 `ui.md` 의 셀 줄바꿈 · 가로 스크롤 동작을 따른다(실험 3 의 원인, 설계 §8.3)
-- [ ] 시험: 시나리오 ID 마다 1개, 이름에 ID 포함. 통합 시험 2개. E2E 와 보조 함수(`login`, `createStaff`, `createOrder`)
-- [ ] README: 절 구성 = 개요, 실행, 시험 명령(필터 예 `./gradlew test --tests '*StaffServiceTest'`, "완료 전 `./gradlew test` 와 `pnpm test` 실행" 문장 포함), 디렉터리 구조, 규칙, 시험용 로그인 계정
-- [ ] `./scripts/verify-all.sh`
-- [ ] harness 연동 설정: Vitest · Playwright JUnit 결과가 `frontend/reports/junit-vitest.xml`, `frontend/reports/junit-e2e.xml` 에 생기고, E2E 가 `APP_PORT` 를 읽는다(설계 §5.5)
-- [ ] 숨김 채점 기본 동작 · 화면 시험 전부 통과
+- [x] 시험: 시나리오 ID 마다 1개, 이름에 ID 포함. 통합 시험 2개. E2E 와 보조 함수(`login`, `createStaff`, `createOrder`)
+  - 결과: `scenarios.md` 의 ID 74개가 시험 이름에 한 번씩(누락 · 중복 0). `CheckoutFlowIT`, `RefundFlowIT`. E2E 5개와 `login`, `createStaff`, `createOrder`, `payOrder`, `requestRefund`
+- [x] README: 절 구성 = 개요, 실행, 시험 명령(필터 예 `./gradlew test --tests '*StaffServiceTest'`, "완료 전 `./gradlew test` 와 `pnpm test` 실행" 문장 포함), 디렉터리 구조, 규칙, 시험용 로그인 계정
+- [x] `./scripts/verify-all.sh`
+  - 결과: 실행 이미지에서 `pnpm install --frozen-lockfile` 뒤 exit 0(backend `BUILD SUCCESSFUL`, Vitest 10, E2E 5)
+- [x] harness 연동 설정: Vitest · Playwright JUnit 결과가 `frontend/reports/junit-vitest.xml`, `frontend/reports/junit-e2e.xml` 에 생기고, E2E 가 `APP_PORT` 를 읽는다(설계 §5.5)
+- [x] 숨김 채점 기본 동작 · 화면 시험 전부 통과
+  - 결과: 실행 이미지에서 `basic` 63 · `screens` 20 · `ui-flows` 3, 실패 0. 확인 중 harness 채점 컨테이너가 `lab/spec` 을 연결하지 않는 결함을 찾아 고쳤다(실행 계약 §11)
 - [ ] 정상성 확인: §5.4 의 금지 항목(긴 함수, 의미 없는 이름, 거대 클래스, 복사 붙여넣기, 순환 의존, 시험 누락, 규칙 숫자 중복)이 없다
+  - 자동 확인: 가장 큰 운영 파일 246줄, 시험 누락 0, 규칙 숫자 1곳, 레이어 순환은 ArchUnit. 긴 함수 · 이름 · 복사 붙여넣기는 사람 검토에서 판정한다
 
 A 승인 요청 전 gate: 설계 §19.3 의 A 사람 리뷰자와 정상성 판정 방법이 정해져 있다.
 - 결정(2026-10-03): A 사람 리뷰자는 사용자다. 리뷰자가 설계와 가설을 아는 사람이라는 점을 결과 보고의 한계에 적는다. 판정 기록 형식은 리뷰 때 정한다
