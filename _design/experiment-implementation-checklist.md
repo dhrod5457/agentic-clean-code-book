@@ -93,7 +93,8 @@ Variant 보다 먼저 쓴다. 과제 문구도 이 단계에서 먼저 고정한
   - 결과: `lab/harness/`. 가짜 process 시험 56개 통과(`pnpm test`). 독립 검토 A(실험 타당성) · B(재현성) · C(실패 의미) blocker 0, major 0. 실제 Claude 실행 명령은 컨테이너 항목과 함께 더한다
   - 완료 조건: 실제 Claude 호출 없이 가짜 process 로 정상 종료, Agent 비정상 종료, timeout, 채점 성공 · 실패, harness 내부 오류를 자동 시험으로 확인한다
 - [x] Docker Desktop VM 메모리 20GB 이상(2026-10-03 완료, 실행 계약 §4.1)
-- [ ] 실험 기간 Docker Desktop 자동 갱신 끄기(실행 계약 §4.1)
+- [x] 실험 기간 Docker Desktop 자동 갱신 끄기(실행 계약 §4.1)
+  - 결과(2026-10-03): 사용자가 설정. `settings-store.json` 에서 `DisableUpdate: true`, `SilentModulesUpdate: false` 확인
 - [x] 컨테이너 연결 경로: workspace, 빈 `CLAUDE_CONFIG_DIR`, hook 출력, 읽기 전용 `/opt/cc/` 만 연결(실행 계약 §4.3)
   - 완료 조건: 컨테이너 안의 환경 변수 · 연결 경로 · hostname · `/opt/cc/` 파일 내용에 `agentic`, `variant`, `실험`, `experiment`, Variant 코드가 없다
 - [x] OOM · 외부 원인 종료 판정(`docker inspect`, `docker events`)과 재채점(`stage = after_agent` 실행을 source commit + `final.patch` 복사본으로 다시 채점, 최대 2회) (실행 계약 §6.3, §7)
