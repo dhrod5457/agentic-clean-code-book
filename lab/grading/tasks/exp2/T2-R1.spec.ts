@@ -10,5 +10,5 @@ defineListTask({
     .filter((r) => r.status === 'REQUESTED' && ms(r.requested_at) < T0_MS - 2 * DAY)
     .sort((a, b) => ms(a.requested_at) - ms(b.requested_at) || a.id - b.id),
   columns: ['ID', '주문 ID', '요청 금액', '요청일시'],
-  firstRowCells: (r) => [String(r.id), String(r.order_id), won(r.amount), dateTime(r.requested_at)],
+  rowCells: (r) => [String(r.id), String(r.order_id), won(r.amount), dateTime(r.requested_at)],
 });

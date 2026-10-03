@@ -10,5 +10,5 @@ defineListTask({
     .filter((o) => o.total_amount >= 500_000)
     .sort((a, b) => b.total_amount - a.total_amount || b.id - a.id),
   columns: ['ID', '회원 ID', '상태', '결제 금액', '주문일시'],
-  firstRowCells: (o) => [String(o.id), String(o.member_id), LABELS.orderStatus[o.status], won(o.total_amount), dateTime(o.created_at)],
+  rowCells: (o) => [String(o.id), String(o.member_id), LABELS.orderStatus[o.status], won(o.total_amount), dateTime(o.created_at)],
 });

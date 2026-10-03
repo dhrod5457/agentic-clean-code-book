@@ -14,7 +14,7 @@ export interface ListTask<Row extends { id: number }> {
   keys: string[];
   expected: Row[];
   columns: string[];
-  firstRowCells: (row: Row) => string[];
+  rowCells: (row: Row) => string[];
 }
 
 const collator = new Intl.Collator('ko');
@@ -59,5 +59,6 @@ async function checkScreen<Row extends { id: number }>(page: Page, task: ListTas
   expect(await headers(table)).toEqual(task.columns);
   const rows = await bodyRows(table);
   expect(rows.map((r) => r[0])).toEqual(task.expected.map((r) => String(r.id)));
-  expect(rows[0]).toEqual(task.firstRowCells(task.expected[0]));
+  // 모든 기대 행의 셀을 비교한다. 첫 행만 보면 이후 행의 금액 · 상태 · 날짜 표시 오류가 통과한다
+  expect(rows).toEqual(task.expected.map((r) => task.rowCells(r)));
 }

@@ -10,5 +10,5 @@ defineListTask({
     .filter((d) => d.status === 'SHIPPED' && d.shipped_at !== null && ms(d.shipped_at) < T0_MS - 3 * DAY)
     .sort((a, b) => ms(a.shipped_at!) - ms(b.shipped_at!) || a.id - b.id),
   columns: ['ID', '주문 ID', '배송비', '출고일시'],
-  firstRowCells: (d) => [String(d.id), String(d.order_id), won(d.fee), dateTime(d.shipped_at)],
+  rowCells: (d) => [String(d.id), String(d.order_id), won(d.fee), dateTime(d.shipped_at)],
 });

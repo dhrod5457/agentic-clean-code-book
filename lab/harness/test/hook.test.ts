@@ -83,6 +83,29 @@ test('시험 결과는 Agent 의 현재 디렉터리와 관계없이 작업 디�
   }
 });
 
+test('파일 시각이 명령 시작보다 이르게 기록돼도 명령 중에 새로 생기거나 바뀐 결과 파일은 복사한다', () => {
+  const out = tmp('hook-');
+  const ws = tmp('ws-');
+  const results = path.join(ws, 'backend/build/test-results/test');
+  mkdirSync(results, { recursive: true });
+  const kept = path.join(results, 'TEST-Kept.xml');
+  const changed = path.join(results, 'TEST-Changed.xml');
+  writeFileSync(kept, '<kept/>');
+  writeFileSync(changed, '<old/>');
+  const past = new Date(Date.now() - 60_000);
+  for (const f of [kept, changed]) utimesSync(f, past, past);
+  const call = { tool_name: 'Bash', tool_use_id: 'toolu_clock', cwd: ws, tool_input: { command: './gradlew test' } };
+  hook(out, 'pre', call, ws);
+  // 파일 시스템 시각 정밀도나 시계 차이로 명령 시작보다 이른 시각이 기록된 경우
+  const earlier = new Date(Date.now() - 2_000);
+  writeFileSync(path.join(results, 'TEST-New.xml'), '<new/>');
+  writeFileSync(changed, '<changed-longer/>');
+  for (const f of [path.join(results, 'TEST-New.xml'), changed]) utimesSync(f, earlier, earlier);
+  hook(out, 'post', call, ws);
+  const copied = path.join(out, 'artifacts/test-001/backend/build/test-results/test');
+  assert.deepEqual(['TEST-Changed.xml', 'TEST-Kept.xml', 'TEST-New.xml'].map((n) => existsSync(path.join(copied, n))), [true, false, true]);
+});
+
 test('명령 실행 중 바뀐 시험 결과 파일이 없으면 복사하지 않는다', () => {
   const out = tmp('hook-');
   const cwd = tmp('ws-');

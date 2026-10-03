@@ -10,5 +10,5 @@ defineListTask({
     .filter((m) => m.status === 'ACTIVE' && ms(m.last_login_at) <= T0_MS - 365 * DAY)
     .sort((a, b) => ms(a.last_login_at) - ms(b.last_login_at) || a.id - b.id),
   columns: ['ID', '이름', '이메일', '등급', '마지막 로그인'],
-  firstRowCells: (m) => [String(m.id), m.name, m.email, LABELS.grade[m.grade], dateTime(m.last_login_at)],
+  rowCells: (m) => [String(m.id), m.name, m.email, LABELS.grade[m.grade], dateTime(m.last_login_at)],
 });

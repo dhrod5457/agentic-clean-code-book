@@ -1,5 +1,6 @@
 // Claude Code hook: 도구 호출 입력과 결과에 기록 시각을 붙여 hooks.jsonl 에 추가한다.
-// Bash 명령이 끝나면(성공 · 실패 모두) 그 명령 시작 이후 바뀐 시험 결과 파일만 artifacts/test-<순번>/ 에 복사한다.
+// Bash 명령이 끝나면(성공 · 실패 모두) 명령 시작 때의 파일 목록(수정 시각 · 크기)과 비교해
+// 새로 생기거나 바뀐 시험 결과 파일만 artifacts/test-<순번>/ 에 복사한다. 시계 비교는 파일 시스템 시각 정밀도에 따라 틀린다.
 // 명령 이름으로 시험 명령을 고르지 않는다. gradlew build · check 처럼 시험을 함께 실행하는 명령도 있어서다.
 // 표준 출력에 쓰지 않고 항상 exit 0 으로 끝난다.
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
@@ -21,18 +22,27 @@ function filesUnder(dir) {
   return out;
 }
 
-function copyNewResults(cwd, sinceMs) {
-  const files = RESULT_ROOTS.flatMap((root) => filesUnder(path.join(cwd, root)))
-    .filter((f) => statSync(f).mtimeMs >= sinceMs)
+// 결과 파일의 상대 경로 → [수정 시각, 크기]
+function snapshot() {
+  const files = RESULT_ROOTS.flatMap((root) => filesUnder(path.join(WORKSPACE, root)))
     .filter((f) => !f.includes(`${path.sep}frontend${path.sep}reports${path.sep}`) || /junit.*\.xml$/.test(f));
+  return Object.fromEntries(files.map((f) => {
+    const st = statSync(f);
+    return [path.relative(WORKSPACE, f), [st.mtimeMs, st.size]];
+  }));
+}
+
+function copyNewResults(before) {
+  const now = snapshot();
+  const files = Object.keys(now).filter((rel) => before[rel]?.[0] !== now[rel][0] || before[rel]?.[1] !== now[rel][1]);
   if (files.length === 0) return null;
   const base = path.join(OUT, 'artifacts');
   mkdirSync(base, { recursive: true });
   const dest = path.join(base, `test-${String(readdirSync(base).length + 1).padStart(3, '0')}`);
-  for (const f of files) {
-    const target = path.join(dest, path.relative(cwd, f));
+  for (const rel of files) {
+    const target = path.join(dest, rel);
     mkdirSync(path.dirname(target), { recursive: true });
-    copyFileSync(f, target);
+    copyFileSync(path.join(WORKSPACE, rel), target);
   }
   return path.relative(OUT, dest);
 }
@@ -44,10 +54,9 @@ try {
   mkdirSync(path.join(OUT, 'pre'), { recursive: true });
   const record = { at, phase, ...input };
   const id = typeof input.tool_use_id === 'string' ? input.tool_use_id.replace(/[^A-Za-z0-9_-]/g, '') : '';
-  if (phase === 'pre' && id) writeFileSync(path.join(OUT, 'pre', id), String(Date.now()));
+  if (phase === 'pre' && id && input.tool_name === 'Bash') writeFileSync(path.join(OUT, 'pre', id), JSON.stringify(snapshot()));
   if (phase === 'post' && id && input.tool_name === 'Bash' && existsSync(path.join(OUT, 'pre', id))) {
-    const since = Number(readFileSync(path.join(OUT, 'pre', id), 'utf8'));
-    record.copied_test_results = copyNewResults(WORKSPACE, since);
+    record.copied_test_results = copyNewResults(JSON.parse(readFileSync(path.join(OUT, 'pre', id), 'utf8')));
   }
   appendFileSync(path.join(OUT, 'hooks.jsonl'), `${JSON.stringify(record)}\n`);
 } catch (e) {

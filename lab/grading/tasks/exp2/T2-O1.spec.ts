@@ -12,5 +12,5 @@ defineListTask({
     .filter((o) => o.status === 'PENDING_PAYMENT' && deadline(o.created_at) > T0_MS && deadline(o.created_at) <= T0_MS + 10 * MINUTE)
     .sort((a, b) => ms(a.created_at) - ms(b.created_at) || a.id - b.id),
   columns: ['ID', '회원 ID', '결제 금액', '주문일시'],
-  firstRowCells: (o) => [String(o.id), String(o.member_id), won(o.total_amount), dateTime(o.created_at)],
+  rowCells: (o) => [String(o.id), String(o.member_id), won(o.total_amount), dateTime(o.created_at)],
 });

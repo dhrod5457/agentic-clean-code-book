@@ -10,5 +10,5 @@ defineListTask({
     .filter((m) => m.status === 'WITHDRAWN' && m.withdrawn_at !== null && ms(m.withdrawn_at) >= T0_MS - 30 * DAY)
     .sort((a, b) => ms(b.withdrawn_at!) - ms(a.withdrawn_at!) || b.id - a.id),
   columns: ['ID', '이름', '이메일', '탈퇴일시'],
-  firstRowCells: (m) => [String(m.id), m.name, m.email, dateTime(m.withdrawn_at)],
+  rowCells: (m) => [String(m.id), m.name, m.email, dateTime(m.withdrawn_at)],
 });

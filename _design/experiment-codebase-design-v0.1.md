@@ -968,7 +968,7 @@ hook 은 기록만 하고 출력과 결정을 내지 않는다. hook 설정은 h
 
 ## 14.3 시험 산출물 수집
 
-- `PostToolUse` · `PostToolUseFailure` hook 이 Bash 명령이 끝날 때마다 `backend/build/test-results/`, `frontend/test-results/`, `frontend/reports/junit*.xml` 중 그 명령의 `PreToolUse` 기록 시각 이후 수정된 파일만 `artifacts/test-<순번>/` 으로 복사한다. 새 파일이 없으면 복사하지 않는다. 명령 이름으로 시험 명령을 고르지 않는다. `./gradlew build` · `check` 처럼 시험을 함께 실행하는 명령과 `pnpm --filter` 같은 형식을 이름 패턴으로 모두 잡을 수 없기 때문이다. 시험이 실패한 명령도 복사한다. 경로는 Agent 의 현재 디렉터리가 아니라 작업 디렉터리 루트(`/work/shop-admin`) 기준이다. hook 입력의 `cwd` 는 Agent 가 `cd backend` 하면 바뀌기 때문이다. Gradle 은 이번에 실행하지 않은 시험 클래스의 이전 XML 을 지우지 않으므로, 시각으로 거르지 않으면 이전 결과를 이번 결과로 잘못 센다
+- `PostToolUse` · `PostToolUseFailure` hook 이 Bash 명령이 끝날 때마다 `backend/build/test-results/`, `frontend/test-results/`, `frontend/reports/junit*.xml` 중 그 명령의 `PreToolUse` 때 남긴 파일 목록(수정 시각 · 크기)과 비교해 새로 생기거나 바뀐 파일만 `artifacts/test-<순번>/` 으로 복사한다. 시계 비교(수정 시각이 시작 시각 이후)는 파일 시스템 시각 정밀도에 따라 새 파일을 놓쳐 쓰지 않는다. 새 파일이 없으면 복사하지 않는다. 명령 이름으로 시험 명령을 고르지 않는다. `./gradlew build` · `check` 처럼 시험을 함께 실행하는 명령과 `pnpm --filter` 같은 형식을 이름 패턴으로 모두 잡을 수 없기 때문이다. 시험이 실패한 명령도 복사한다. 경로는 Agent 의 현재 디렉터리가 아니라 작업 디렉터리 루트(`/work/shop-admin`) 기준이다. hook 입력의 `cwd` 는 Agent 가 `cd backend` 하면 바뀌기 때문이다. Gradle 은 이번에 실행하지 않은 시험 클래스의 이전 XML 을 지우지 않으므로, 시각으로 거르지 않으면 이전 결과를 이번 결과로 잘못 센다
 - Vitest · Playwright 의 JUnit reporter 는 두 Variant 설정에 같게 넣는다
 - 실행 종료 후 harness 가 5단계 전체 검증을 따로 실행하고 시간을 잰다. Agent 의 실행 시간과 섞지 않는다
 
@@ -1370,3 +1370,5 @@ FROZEN → REVIEWED. 컨테이너 단계 독립 검토(실행 계약 §12 9차)�
 
 독립 검토: 실행 계약 §12 9차(major 9 · minor 10)와 10차(blocker 0, major 0, minor 8 → 반영 확인 blocker 0, major 0, minor 1). 검토자가 변경 4 의 FROZEN 에 동의했고 남은 minor 1건(§14.4 시험 명령 정의)도 반영했다.
 판정: blocker 0, major 0. 설계를 FROZEN 으로 되돌린다.
+
+후속 수정(2026-10-03, PR #5 리뷰): §14.3 의 결과 파일 선택을 시각 비교에서 명령 전후 파일 목록 비교로 바꿨다. 리뷰 환경에서 새 파일의 수정 시각이 명령 시작 시각보다 이르게 기록돼 복사가 빠졌다. 실험 조건은 바뀌지 않는다.

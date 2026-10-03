@@ -341,9 +341,13 @@ test('작업 디렉터리의 .git 에 원본 저장소 경로와 host 사용자 
   const f = fixture(AGENT_OK);
   const { runDir } = await executeRun(f.spec(), f.opts);
   const gitDir = path.join(runDir, 'workspace/shop-admin/.git');
+  // 사용자 이름만으로 찾으면 root 같은 흔한 이름이 git 기본 sample hook 문구에 걸린다. 원본 경로 · home 경로 · git 사용자 설정을 본다
   // grep 은 일치가 없으면 exit 1 이다
-  const r = spawnSync('grep', ['-rlF', '-e', f.source.repo, '-e', os.userInfo().username, gitDir], { encoding: 'utf8' });
+  const r = spawnSync('grep', ['-rlF', '-e', f.source.repo, '-e', os.homedir(), gitDir], { encoding: 'utf8' });
   assert.equal(r.status, 1, r.stdout);
+  for (const key of ['user.name', 'user.email']) {
+    assert.equal(spawnSync('git', ['--git-dir', gitDir, 'config', '--local', '--get', key]).status, 1, key);
+  }
 });
 
 test('host 전역 git 설정(excludesfile)은 최종 diff 에 영향을 주지 않는다', async () => {
