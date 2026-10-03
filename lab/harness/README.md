@@ -13,9 +13,11 @@
 | environment fingerprint | 구현. harness 를 실행한 기계에서 측정 |
 | `lab/grading/run.sh` 호출(판정 · 진단 묶음) | 구현 |
 | 재실행(새 attempt) | 구현 |
-| 컨테이너 실행, egress 제한, 연결 경로, OOM 판정, 재채점, hook(hook 스크립트 내용의 실행 조건 hash 포함), 세션 기록 복사, harness 종료 시 Agent process 정리, 실행 명령(CLI) | 미구현. 체크리스트 3단계 남은 항목 |
+| 컨테이너 실행(`runtime: docker`), 실행 이미지와 egress 제한(`image/`), 연결 경로, OOM · Docker 오류 판정, 채점 컨테이너 | 구현 |
+| 기록용 hook(`config/cc/`, 실행 조건 hash 포함), 재채점(`regradeRun`), 실행 명령(`src/cli.ts`), 내보내기(`export.sh`) | 구현 |
+| 의존성 offline cache 와 `GRADLE_USER_HOME` 준비, harness 강제 종료 시 컨테이너 정리 | 미구현. 체크리스트 7단계 · 이후 |
 
-**실제 Claude Code 를 실행하지 않는다.** 컨테이너가 없으면 Agent 가 작업 디렉터리 밖의 `run.json`(Variant, 실험 이름)을 읽을 수 있고, 사용자 전역 설정과 분리되지 않는다(실행 계약 §4.3). 그래서 실행 명령을 두지 않았고, 시험은 가짜 Agent · 가짜 채점 스크립트로만 실행한다.
+실제 Claude Code 는 `runtime: docker`(실행 설정 `config/exec-v0.1.json`)로만 실행한다. `runtime: local` 은 컨테이너 없이 가짜 process 로 orchestration 을 시험할 때만 쓴다. local 에서는 Agent 가 실행 디렉터리의 `run.json` 을 읽을 수 있고 사용자 전역 설정과 분리되지 않는다(실행 계약 §4.3).
 
 ## 구성
 
@@ -45,6 +47,20 @@
 
 어느 단계든 harness · 환경 문제면 `harness_failed` 와 실패 단계(`prepare`, `agent_start`, `agent`, `after_agent`)를 기록한다. 상태가 바뀔 때마다 `result.json` 을 다시 만든다.
 
+## 실행
+
+```
+pnpm lab run --experiment pilot-1 --task pilot --variant a --repetition 1 --source-repo <실행용 저장소> --source-commit <40자리 SHA>
+pnpm lab regrade --run-dir <실행 디렉터리>
+pnpm lab rebuild-result --run-dir <실행 디렉터리>
+./export.sh <Variant 디렉터리> <출력 상위 디렉터리>
+```
+
+- 결과 root 기본값은 `~/lab-runs/v0.1` 이다(`--results-root` 로 바꾼다). Git 작업 트리 밖이고 경로에 금지 문자열이 없어야 한다
+- 구독 token 은 `CLAUDE_CODE_OAUTH_TOKEN` 이 없으면 `~/.config/agentic-lab/claude-oauth-token` 에서 읽는다. 값은 출력 · 기록하지 않는다
+- macOS 에서는 실행 중 `caffeinate` 로 잠자기를 막는다
+- 실행 이미지는 `image/` 에서 build 하고 id 를 `image.lock` 과 실행 설정 `environment.image` 에 기록한다
+
 ## 시험
 
 host 의 Node.js 22.18 이상에서 TypeScript 를 그대로 실행한다.
@@ -55,4 +71,4 @@ pnpm typecheck
 pnpm test
 ```
 
-시험은 임시 디렉터리에 가짜 실행용 저장소, 가짜 Agent(`claude` 대신 셸 스크립트), 가짜 `run.sh` 를 만들어 실행한다. 네트워크와 실제 Claude 호출을 쓰지 않는다.
+시험은 임시 디렉터리에 가짜 실행용 저장소, 가짜 Agent(`claude` 대신 셸 스크립트), 가짜 `run.sh` 를 만들어 실행한다. 실제 Claude 호출은 하지 않는다. `test/container.test.ts` 는 `image.lock` 의 이미지 위에 가짜 `claude` 만 더한 이미지로 실제 컨테이너 경로를 실행하고, Docker 나 이미지가 없으면 건너뛴다.

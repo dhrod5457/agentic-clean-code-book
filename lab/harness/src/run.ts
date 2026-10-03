@@ -1,16 +1,17 @@
 import { execFileSync } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { agentEnv, classifyAgent, claudeArgs, summarizeStream } from './agent.ts';
+import { agentEnv, classifyAgent, claudeArgs, containerAgentEnv, summarizeStream, type ContainerExit } from './agent.ts';
+import { agentRunArgs, CONTAINER, containerSettingsPath, envFlags, gradingRunArgs, imageProbe, inspectContainer, removeContainer } from './docker.ts';
 import {
-  canonicalJson, conditionHash, inputHash, LAB_ROOT, sha256, SpecError, validateSpec,
+  canonicalJson, conditionHash, FORBIDDEN, inputHash, LAB_ROOT, sha256, SpecError, validateSpec,
   type ExecConfig, type RunSpec, type TaskDef,
 } from './config.ts';
 import { collectFingerprint, extractVersion, git, labChanges, localProbe, TOOLS, type Probe } from './fingerprint.ts';
 import { gradingArgs, INTERRUPTED_EXIT, junitPath, parseJunit, portFree, suiteFileName, suiteStatus, type SuiteKind, type SuiteStatus } from './grader.ts';
 import {
-  ARTIFACTS, buildResult, gradingWorkspace, HARNESS_GIT, HARNESS_HOME, HARNESS_INDEX, RAW, WORKSPACE, writeResult,
+  ARTIFACTS, buildResult, gradingWorkspace, HARNESS_GIT, HARNESS_HOME, HARNESS_INDEX, RAW, readEvents, WORKSPACE, writeResult,
   type HarnessEvent, type RunJson,
 } from './normalize.ts';
 import { isSuspended, runProcess, systemClock, type Clock } from './process.ts';
@@ -149,8 +150,13 @@ class RunContext {
 export async function executeRun(spec: RunSpec, opts: RunOptions): Promise<RunOutcome> {
   const labRoot = opts.labRoot ?? LAB_ROOT;
   const clock = opts.clock ?? systemClock;
-  const probe = opts.probe ?? localProbe;
   const config = opts.config;
+  const inContainer = config.environment.runtime === 'docker';
+  if (inContainer && config.environment.image === null) throw new SpecError('docker 실행에는 실행 설정의 environment.image 가 필요하다');
+  const probe = opts.probe ?? (inContainer ? imageProbe(config.environment.image!) : localProbe);
+  // bind mount 의 host 경로는 컨테이너 안 /proc/self/mountinfo 에 보인다. 연결하는 경로는 모두 결과 root 아래에 두고,
+  // 결과 root 경로에 금지 문자열이 없어야 한다(실행 계약 §4.3)
+  if (inContainer && FORBIDDEN.test(path.resolve(opts.resultsRoot))) throw new SpecError(`결과 root 경로에 Agent 에게 보이면 안 되는 문자열이 있다: ${opts.resultsRoot}`);
 
   // 여기까지의 실패는 실행을 시작하지 않은 것이다. 실행 디렉터리를 만들지 않는다
   const task = validateSpec(spec, opts.tasks);
@@ -201,6 +207,13 @@ export async function executeRun(spec: RunSpec, opts: RunOptions): Promise<RunOu
   };
   writeFileSync(path.join(runDir, 'run.json'), `${JSON.stringify(runJson, null, 2)}\n`, { flag: 'wx' });
 
+  // settings · hook 파일은 저장소 경로를 그대로 연결하지 않고 실행 디렉터리로 복사해 /opt/cc 로 연결한다
+  const ccDir = path.join(runDir, 'container', 'cc');
+  mkdirSync(ccDir, { recursive: true });
+  for (const f of [config.agent.settings_file, ...config.agent.hook_files]) {
+    if (f !== null) cpSync(path.resolve(labRoot, f), path.join(ccDir, path.basename(f)));
+  }
+
   const ctx = new RunContext(runDir, clock);
   ctx.event({ type: 'run_started', at: ctx.now() });
   ctx.event({ type: 'harness_code', at: ctx.now(), when: 'start', head, lab_changes: changes });
@@ -221,12 +234,24 @@ export async function executeRun(spec: RunSpec, opts: RunOptions): Promise<RunOu
       if (cli !== config.agent.version) throw new HarnessError('prepare', `Claude Code 버전 ${cli} 가 실행 설정 ${config.agent.version} 과 다르다`);
       // Agent 와 같은 환경 변수 · settings 로 인증 수단을 확인한다. 모델을 호출하지 않는다(실행 계약 §4.4).
       // Agent 의 설정 디렉터리를 비워 두려고 별도의 빈 디렉터리를 쓴다
-      const settings = config.agent.settings_file === null ? [] : ['--settings', path.resolve(labRoot, config.agent.settings_file)];
       const auth = await runProcess({
-        cmd: config.agent.executable, args: [...settings, 'auth', 'status', '--json'], cwd: runDir,
-        env: agentEnv(config, path.join(runDir, 'harness', 'auth-config'), process.env),
+        ...(inContainer ? (() => {
+          const env = { ...containerAgentEnv(config, process.env), CLAUDE_CONFIG_DIR: '/tmp/auth-config' };
+          const settings = containerSettingsPath(config);
+          return {
+            cmd: 'docker',
+            args: ['run', '--rm', '--network', 'none', '--entrypoint', '', '--user', 'agent', '-v', `${ccDir}:${CONTAINER.cc}:ro`, ...envFlags(env), config.environment.image!,
+              config.agent.executable, ...(settings === null ? [] : ['--settings', settings]), 'auth', 'status', '--json'],
+            env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', ...env },
+          };
+        })() : {
+          cmd: config.agent.executable,
+          args: [...(config.agent.settings_file === null ? [] : ['--settings', path.resolve(labRoot, config.agent.settings_file)]), 'auth', 'status', '--json'],
+          env: agentEnv(config, path.join(runDir, 'harness', 'auth-config'), process.env),
+        }),
+        cwd: runDir,
         stdoutPath: path.join(runDir, RAW.prepare, 'auth-status.out'), stderrPath: path.join(runDir, RAW.prepare, 'auth-status.err'),
-        timeoutMs: 30_000, graceMs: t.grace, clock,
+        timeoutMs: 60_000, graceMs: t.grace, clock,
       });
       let method: unknown = null;
       try {
@@ -243,14 +268,32 @@ export async function executeRun(spec: RunSpec, opts: RunOptions): Promise<RunOu
     // Agent
     ctx.stage = 'agent';
     ctx.transition('running');
-    const args = claudeArgs(config, labRoot, prompt.toString('utf8'), sessionId);
-    const env = agentEnv(config, path.join(runDir, RAW.agentConfig), process.env);
-    writeFileSync(path.join(runDir, RAW.agentInvocation), `${JSON.stringify({ executable: config.agent.executable, args, env_names: Object.keys(env).sort() }, null, 2)}\n`);
+    const containerName = `r-${runId}`;
+    const mounts = { claude: path.join(runDir, 'container', 'claude-config'), hooks: path.join(runDir, 'container', 'hooks-out') };
+    let launch: { cmd: string; args: string[]; env: Record<string, string>; cwd: string; agentArgs: string[]; envNames: string[] };
+    if (inContainer) {
+      mkdirSync(mounts.claude, { recursive: true });
+      mkdirSync(mounts.hooks, { recursive: true });
+      const agentArgs = claudeArgs(config, containerSettingsPath(config), prompt.toString('utf8'), sessionId);
+      const env = containerAgentEnv(config, process.env);
+      launch = {
+        cmd: 'docker',
+        args: agentRunArgs({ config, name: containerName, workspace, claudeConfigDir: mounts.claude, hooksOutDir: mounts.hooks, ccDir, env, command: [config.agent.executable, ...agentArgs] }),
+        env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', ...env },
+        cwd: runDir, agentArgs, envNames: Object.keys(env).sort(),
+      };
+    } else {
+      const agentArgs = claudeArgs(config, config.agent.settings_file === null ? null : path.resolve(labRoot, config.agent.settings_file), prompt.toString('utf8'), sessionId);
+      const env = agentEnv(config, path.join(runDir, RAW.agentConfig), process.env);
+      launch = { cmd: config.agent.executable, args: agentArgs, env, cwd: workspace, agentArgs, envNames: Object.keys(env).sort() };
+    }
+    // 기록에는 환경 변수 이름만 남긴다. docker 인자에도 값이 없다
+    writeFileSync(path.join(runDir, RAW.agentInvocation), `${JSON.stringify({ runtime: config.environment.runtime, executable: config.agent.executable, args: launch.agentArgs, launcher: launch.cmd === 'docker' ? launch.args.slice(0, launch.args.length - launch.agentArgs.length) : null, env_names: launch.envNames }, null, 2)}\n`);
     const agent = await runProcess({
-      cmd: config.agent.executable,
-      args,
-      cwd: workspace,
-      env,
+      cmd: launch.cmd,
+      args: launch.args,
+      cwd: launch.cwd,
+      env: launch.env,
       stdoutPath: path.join(runDir, RAW.agentStdout),
       recvPath: path.join(runDir, RAW.agentRecv),
       stderrPath: path.join(runDir, RAW.agentStderr),
@@ -258,6 +301,20 @@ export async function executeRun(spec: RunSpec, opts: RunOptions): Promise<RunOu
       graceMs: t.grace,
       clock,
     });
+    let containerExit: ContainerExit | null = null;
+    if (inContainer) {
+      // 시간 초과로 docker client 만 끝났으면 컨테이너가 남아 있을 수 있다. 종료 상태를 읽고 정리한다
+      let state = await inspectContainer(containerName);
+      if (state.running) {
+        await removeContainer(containerName);
+        state = { ...state, running: false };
+      }
+      containerExit = { found: state.found, exit_code: state.exit_code, oom_killed: state.oom_killed, error: state.error };
+      ctx.event({ type: 'container_exit', at: ctx.now(), role: 'agent', name: containerName, ...containerExit });
+      await removeContainer(containerName);
+      cpSync(mounts.claude, path.join(runDir, RAW.agentConfig), { recursive: true });
+      cpSync(mounts.hooks, path.join(runDir, RAW.agentHooks), { recursive: true });
+    }
     ctx.event({ type: 'agent_process', ...agent });
     // Agent 종료 기록이 남은 뒤의 예외는 Agent 관찰을 다시 뽑지 않도록 after_agent 다
     ctx.stage = 'after_agent';
@@ -265,6 +322,7 @@ export async function executeRun(spec: RunSpec, opts: RunOptions): Promise<RunOu
       agent,
       summarizeStream(readFileSync(path.join(runDir, RAW.agentStdout), 'utf8')),
       readFileSync(path.join(runDir, RAW.agentStderr), 'utf8'),
+      containerExit,
     );
     if (cls.state === 'harness_failed') throw new HarnessError(cls.stage, cls.reason);
     ctx.transition(cls.state);
@@ -282,7 +340,7 @@ export async function executeRun(spec: RunSpec, opts: RunOptions): Promise<RunOu
     const gradingWs = path.join(runDir, gradingWorkspace(0));
     await ctx.guarded('after_agent', () => gradingCopy(spec.source.repo, spec.source.commit, path.join(runDir, ARTIFACTS.patch), gradingWs, step(path.join(RAW.grading, 'copy-0'))));
 
-    const grader = new Grader(ctx, config, labRoot, gradingWs, spec.port, clock);
+    const grader = new Grader(ctx, config, labRoot, gradingWs, spec.port, clock, inContainer ? runId : null);
     const statuses: SuiteStatus[] = [];
     for (const suite of task.grading.normative) statuses.push(await grader.normative(suite));
     ctx.transition(statuses.every((s) => s === 'passed') ? 'grading_succeeded' : 'grading_failed');
@@ -317,10 +375,15 @@ class Grader {
   private readonly workspace: string;
   private readonly port: number;
   private readonly clock: Clock;
-  // 재채점 회차. 첫 채점은 0 이다. 재채점은 이후 단계에서 1 부터 쓴다(실행 계약 §7)
-  private readonly round = 0;
+  // 재채점 회차. 첫 채점은 0, 재채점은 1 부터다(실행 계약 §7)
+  private readonly round: number;
 
-  constructor(ctx: RunContext, config: ExecConfig, labRoot: string, workspace: string, port: number, clock: Clock) {
+  // 컨테이너 채점이면 컨테이너 이름에 쓸 실행 ID. local 채점이면 null
+  private readonly containerRunId: string | null;
+
+  constructor(ctx: RunContext, config: ExecConfig, labRoot: string, workspace: string, port: number, clock: Clock, containerRunId: string | null, round = 0) {
+    this.round = round;
+    this.containerRunId = containerRunId;
     this.ctx = ctx;
     this.config = config;
     this.labRoot = labRoot;
@@ -337,23 +400,39 @@ class Grader {
     const skipBuild = this.calls > 0 && !this.lastTimedOut;
     this.calls++;
     // 실행자 환경을 그대로 넘기지 않는다. GRADING_SKIP_BUILD 같은 값이 섞이면 build 규칙이 바뀐다
-    const env: Record<string, string> = { TZ: 'Asia/Seoul', LANG: 'ko_KR.UTF-8', GRADING_LOG_DIR: logDir, GRADING_SKIP_BUILD: skipBuild ? '1' : '0' };
-    for (const name of ['PATH', 'HOME', 'JAVA_HOME', 'PLAYWRIGHT_BROWSERS_PATH']) {
-      const v = process.env[name];
-      if (v !== undefined) env[name] = v;
-    }
     const script = path.resolve(this.labRoot, this.config.grading.run_script);
+    let env: Record<string, string>;
+    let launch: { cmd: string; args: string[]; env: Record<string, string> };
+    const name = this.containerRunId === null ? null : `g-${this.containerRunId}-${suiteFileName(suite)}-${this.round}-${attempt}`;
+    if (name !== null) {
+      // 컨테이너 안 경로. PATH · HOME · Java · 브라우저는 이미지 값을 쓴다
+      env = { TZ: 'Asia/Seoul', LANG: 'ko_KR.UTF-8', GRADING_LOG_DIR: CONTAINER.gradingLog, GRADING_SKIP_BUILD: skipBuild ? '1' : '0' };
+      launch = {
+        cmd: 'docker',
+        args: gradingRunArgs({ config: this.config, name, workspace: this.workspace, gradingDir: path.dirname(script), logDir, env, port: this.port, suite }),
+        env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', ...env },
+      };
+    } else {
+      env = { TZ: 'Asia/Seoul', LANG: 'ko_KR.UTF-8', GRADING_LOG_DIR: logDir, GRADING_SKIP_BUILD: skipBuild ? '1' : '0' };
+      for (const n of ['PATH', 'HOME', 'JAVA_HOME', 'PLAYWRIGHT_BROWSERS_PATH']) {
+        const v = process.env[n];
+        if (v !== undefined) env[n] = v;
+      }
+      launch = { cmd: script, args: gradingArgs(this.workspace, this.port, suite), env };
+    }
     const p = await runProcess({
-      cmd: script,
-      args: gradingArgs(this.workspace, this.port, suite),
+      cmd: launch.cmd,
+      args: launch.args,
       cwd: path.dirname(script),
-      env,
+      env: launch.env,
       stdoutPath: path.join(logDir, 'run.stdout.log'),
       stderrPath: path.join(logDir, 'run.stderr.log'),
       timeoutMs,
       graceMs: this.config.timeouts_ms.grace,
       clock: this.clock,
     });
+    // 시간 초과로 docker client 만 끝났으면 채점 컨테이너가 남는다
+    if (name !== null) await removeContainer(name);
     this.lastTimedOut = p.timed_out;
     this.ctx.event({ type: 'grading_process', kind, suite, round: this.round, try: attempt, log_dir: logRel, skip_build: skipBuild, env, ...p });
     let junit = null;
@@ -371,7 +450,8 @@ class Grader {
     this.ctx.stage = 'after_agent';
     let status: SuiteStatus = 'error';
     for (let attempt = 1; attempt <= 2; attempt++) {
-      if (!(await portFree(this.port))) throw new HarnessError('after_agent', `채점 port ${this.port} 를 이미 쓰고 있다`);
+      // 컨테이너 채점은 컨테이너마다 network namespace 가 따로라 host port 를 확인하지 않는다
+      if (this.containerRunId === null && !(await portFree(this.port))) throw new HarnessError('after_agent', `채점 port ${this.port} 를 이미 쓰고 있다`);
       const r = await this.invoke('normative', suite, attempt, this.config.timeouts_ms.grading_normative);
       if (r.p.spawn_error !== null) throw new HarnessError('after_agent', `run.sh 를 시작하지 못했다: ${r.p.spawn_error}`);
       if (r.p.suspended) throw new HarnessError('after_agent', `host 잠자기 감지(채점 ${suite})`);
@@ -387,7 +467,7 @@ class Grader {
 
   async diagnostic(suite: string): Promise<void> {
     try {
-      if (!(await portFree(this.port))) throw new Error(`채점 port ${this.port} 를 이미 쓰고 있다`);
+      if (this.containerRunId === null && !(await portFree(this.port))) throw new Error(`채점 port ${this.port} 를 이미 쓰고 있다`);
       const r = await this.invoke('diagnostic', suite, 1, this.config.timeouts_ms.grading_diagnostic);
       this.ctx.event({ type: 'suite_result', at: this.ctx.now(), kind: 'diagnostic', suite, round: this.round, status: r.status });
     } catch (e) {
@@ -441,4 +521,49 @@ export async function executeWithRetry(
     retryOf = r.runId;
   }
   return { runs, missing: true, usageLimited: false };
+}
+
+// 재채점(실행 계약 §7). harness_failed(after_agent) 이고 판정 결과가 없는 묶음만 다시 채점한다.
+// Agent 관찰은 바꾸지 않으므로 상태는 그대로 두고 회차(round)를 붙인 채점 기록만 더한다. 실행마다 최대 2회
+export async function regradeRun(runDir: string, opts: { labRoot?: string; clock?: Clock } = {}): Promise<RunOutcome> {
+  const labRoot = opts.labRoot ?? LAB_ROOT;
+  const clock = opts.clock ?? systemClock;
+  const run = JSON.parse(readFileSync(path.join(runDir, 'run.json'), 'utf8')) as RunJson;
+  const before = JSON.parse(buildResult(runDir)) as {
+    state: string; harness_failure: { stage: string | null } | null;
+    grading: { normative: { suite: string; status: string | null }[] };
+  };
+  if (before.state !== 'harness_failed' || before.harness_failure?.stage !== 'after_agent') {
+    throw new SpecError(`재채점 대상이 아니다: ${before.state} / ${before.harness_failure?.stage ?? '-'}`);
+  }
+  // 회차는 재채점 시작 기록으로 센다. 채점 process 를 시작하지 못한 회차도 상한에 들어간다
+  const round = readEvents(runDir).filter((e) => e.type === 'regrade').length + 1;
+  if (round > 2) throw new SpecError('재채점은 실행마다 최대 2회다');
+  const decided = new Set(before.grading.normative.filter((s) => s.status !== null).map((s) => s.suite));
+  const pending = run.task.grading.normative.filter((s) => !decided.has(s));
+  if (pending.length === 0) throw new SpecError('판정 결과가 없는 묶음이 없다');
+  // 채점 코드가 실험 잠금과 같아야 같은 기준의 채점이다
+  lockGradingCode(path.resolve(runDir, '../..'), { experiment: run.identity.experiment } as RunSpec, labRoot);
+
+  const config = run.execution_config;
+  const ctx = new RunContext(runDir, clock);
+  ctx.state = 'harness_failed';
+  ctx.stage = 'after_agent';
+  ctx.event({ type: 'regrade', at: ctx.now(), round, suites: pending });
+  const step = (logDir: string): StepOptions => ({ logDir: path.join(runDir, logDir), gitHome: path.join(runDir, HARNESS_HOME), timeoutMs: config.timeouts_ms.prepare, graceMs: config.timeouts_ms.grace, clock });
+  const patch = path.join(runDir, ARTIFACTS.patch);
+  try {
+    // 최종 diff 가 없으면(diff 생성 실패) 보존된 작업 디렉터리에서 먼저 다시 만든다
+    if (!existsSync(patch)) {
+      await captureDiff(path.join(runDir, HARNESS_GIT), path.join(runDir, HARNESS_INDEX), path.join(runDir, WORKSPACE), run.source.commit, path.join(runDir, 'artifacts'), step(path.join(RAW.diffLog, `regrade-${round}`)));
+    }
+    const gradingWs = path.join(runDir, gradingWorkspace(round));
+    await gradingCopy(run.source.repo, run.source.commit, patch, gradingWs, step(path.join(RAW.grading, `copy-${round}`)));
+    const grader = new Grader(ctx, config, labRoot, gradingWs, run.resources.port, clock, config.environment.runtime === 'docker' ? `${run.run_id}-regrade` : null, round);
+    for (const suite of pending) await grader.normative(suite);
+  } catch (e) {
+    ctx.event({ type: 'note', at: ctx.now(), message: `재채점 ${round} 회차 실패: ${(e instanceof Error ? e.message : String(e)).split(`${runDir}${path.sep}`).join('')}` });
+  }
+  writeResult(runDir);
+  return finish(run.run_id, runDir, ctx);
 }

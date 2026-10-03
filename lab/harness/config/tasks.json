@@ -100,5 +100,13 @@
         "diag-exp3-1024"
       ]
     }
+  },
+  "pilot": {
+    "experiment": "pilot",
+    "prompt": "lab/tasks/pilot/prompt.md",
+    "grading": {
+      "normative": [],
+      "diagnostic": []
+    }
   }
 }

@@ -11,7 +11,10 @@
       "WebSearch",
       "WebFetch"
     ],
-    "settings_file": null
+    "settings_file": "lab/harness/config/cc/settings.json",
+    "hook_files": [
+      "lab/harness/config/cc/record.mjs"
+    ]
   },
   "timeouts_ms": {
     "prepare": 900000,
@@ -27,6 +30,7 @@
     "run_script": "lab/grading/run.sh"
   },
   "environment": {
+    "runtime": "docker",
     "image": "sha256:ea03f9418cfc1afe95e4682298854c26407b8376e8b75dfed44fdbe4b789e8ff",
     "platform": "linux/arm64",
     "cpus": 4,

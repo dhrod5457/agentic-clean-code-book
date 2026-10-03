@@ -122,6 +122,8 @@ hook 이 복사하는 시험 산출물(설계 §14.3 의 `artifacts/test-<순번
 Gradle 읽기 전용 cache(`GRADLE_RO_DEP_CACHE`)와 Playwright 브라우저는 host 연결이 아니라 이미지 안 경로다. root 소유로 두어 non-root Agent 가 쓸 수 없다.
 
 - `run.json`, `result.json`, `raw/`, `artifacts/`, 다른 실행의 디렉터리, 이 저장소는 연결하지 않는다
+- bind mount 의 host 원본 경로는 컨테이너 안 `/proc/self/mountinfo` 에 그대로 보인다(2026-10-03 확인). 그래서 연결하는 host 경로는 모두 실행 디렉터리 아래에 둔다. settings · hook 파일도 저장소 경로를 연결하지 않고 `runs/<run_id>/container/cc/` 로 복사해 `/opt/cc` 에 연결한다. `docker` 실행에서 결과 root 경로에 금지 문자열이 있으면 harness 가 시작하지 않는다
+- 채점 컨테이너는 Agent 컨테이너와 같은 이미지를 `agent` 사용자로 실행하고, 채점용 복사본 · `lab/grading`(읽기 전용) · 채점 로그 디렉터리를 연결한다. Agent 가 볼 수 없으므로 연결 경로 제한을 적용하지 않는다. 의존성 cache 층이 생기는 체크리스트 7단계 전까지는 Variant build 를 위해 네트워크를 연다
 - 컨테이너 이름과 hostname 은 `r-<run_id>` 다. 이미지 · 설정 · hook 파일 이름 · 경로 · 내용(주석 포함)에 실험 · Variant 를 나타내는 문자열을 쓰지 않는다
 - 3단계 컨테이너 항목의 완료 조건으로, 컨테이너 안에서 환경 변수 · 연결 경로 · hostname · `/opt/cc/` 파일 내용에 `agentic`, `variant`, `실험`, `experiment`, Variant 코드가 없는지 검사한다
 - 3단계 골격은 컨테이너 없이 host 에서 가짜 Agent 로만 실행한다. 이 상태에서는 작업 디렉터리에서 실행 디렉터리를 읽을 수 있으므로 실제 Agent 를 실행하지 않는다
@@ -342,13 +344,14 @@ USD 예산 대신 구독 사용 한도 안에서 실행한다. 아래 세션 수
       agent/stdout.jsonl                 Agent 표준 출력(stream-json) 바이트 그대로
       agent/stdout.recv.jsonl            stdout 줄마다 수신 시각
       agent/stderr.log
-      agent/claude-config/               세션 기록(transcript) 복사본. 컨테이너 단계
-      agent/hooks/                       hook 기록. 컨테이너 단계
+      agent/claude-config/               세션 기록(transcript) 복사본
+      agent/hooks/                       hook 기록(hooks.jsonl)과 시험 산출물 복사본(artifacts/test-<순번>/)
       grading/copy-<round>/              채점용 복사본 생성 로그
       grading/<묶음>/<round>-<try>/      run.sh 의 GRADING_LOG_DIR(JUnit, 애플리케이션 로그, Playwright 산출물)와 run.sh 출력
     artifacts/
       final.patch                        source commit 대비 최종 diff(새 파일 포함, binary 포함)
       diff-numstat.txt, diff-name-status.txt
+    container/                           컨테이너에 연결하는 디렉터리(cc 사본, 빈 설정 디렉터리, hook 출력). 실행이 끝나면 설정 · hook 기록을 raw/agent/ 로 복사한다
     workspace/shop-admin/                Agent 작업 디렉터리. 실행 후에도 지우지 않는다
     grading-workspace/<round>/shop-admin/  채점용 복사본(source commit + final.patch). 첫 채점 round 는 0
     harness/                             harness 소유 bare 저장소(source.git), 임시 index, git 용 빈 HOME
@@ -443,6 +446,7 @@ fingerprint 는 clone 전에 남겨 준비 단계 실패 실행에도 기록이 
 | 2026-10-03 | 인증 확인의 설정 디렉터리 분리와 `--settings` 전달, 이어서 실행할 때의 상한 계산, 이어가지 못한 `usage_limit` 반복의 결측 처리, §2 · §5.2 · §6.3 문구 | 구독 인증 변경 재확인(§12 8차) |
 | 2026-10-03 | 구독 token 을 shell 환경 변수 대신 저장소 밖 token 파일에서 harness 가 읽어 넘김. 2026-10-03 token 파일 생성(권한 600)과 `auth status` 의 `oauth_token` 확인, 사용자가 usage credits 를 끈 것으로 보고 | 사용자 설정 |
 | 2026-10-03 | 실행 이미지 build(`image.lock`, id `sha256:ea03f941…`)와 실행 설정 `environment.image` 기록, 컨테이너 시작 방식(root 로 egress 제한 후 agent 로 권한 낮춤) | 체크리스트 3단계 이미지 · egress 항목 |
+| 2026-10-03 | 컨테이너 실행 경로(연결 경로 · cc 사본 · 결과 root 경로 검사 · OOM · Docker 오류 판정), 채점 컨테이너, 기록용 hook, 재채점, 실행 명령, 내보내기 스크립트 | 체크리스트 3단계 나머지 항목 |
 
 ---
 

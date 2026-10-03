@@ -1,4 +1,3 @@
-import path from 'node:path';
 import type { ExecConfig } from './config.ts';
 import type { ProcessResult } from './process.ts';
 import type { Stage } from './state.ts';
@@ -8,7 +7,8 @@ import type { Stage } from './state.ts';
 export const EMPTY_MCP_CONFIG = '{"mcpServers":{}}';
 
 // 인자는 실행 설정과 실행마다 다른 값(과제 문구, 세션 ID)으로만 만든다. Variant 를 받지 않는다
-export function claudeArgs(config: ExecConfig, labRoot: string, prompt: string, sessionId: string): string[] {
+// settingsPath 는 Agent 가 실행되는 곳의 경로다(컨테이너 안이면 /opt/cc/...)
+export function claudeArgs(config: ExecConfig, settingsPath: string | null, prompt: string, sessionId: string): string[] {
   const a = config.agent;
   const args = [
     // 과제 문구를 -p 바로 뒤에 둔다. 여러 값을 받는 옵션 뒤에 두면 그 옵션의 값으로 들어간다
@@ -24,9 +24,25 @@ export function claudeArgs(config: ExecConfig, labRoot: string, prompt: string, 
     '--strict-mcp-config',
     '--mcp-config', EMPTY_MCP_CONFIG,
   ];
-  if (a.settings_file !== null) args.push('--settings', path.resolve(labRoot, a.settings_file));
+  if (settingsPath !== null) args.push('--settings', settingsPath);
   args.push('--disallowedTools', ...a.disallowed_tools);
   return args;
+}
+
+// 컨테이너 안 Agent 환경 변수. PATH 는 이미지 값을 쓴다(실행 계약 §3)
+export function containerAgentEnv(config: ExecConfig, host: NodeJS.ProcessEnv): Record<string, string> {
+  const env: Record<string, string> = {
+    TZ: 'Asia/Seoul',
+    LANG: 'ko_KR.UTF-8',
+    DISABLE_AUTOUPDATER: '1',
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+    CLAUDE_CODE_SUBAGENT_MODEL: config.agent.subagent_model,
+    CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '1',
+    CLAUDE_CONFIG_DIR: '/home/agent/.claude',
+    HOME: '/home/agent',
+  };
+  if (host.CLAUDE_CODE_OAUTH_TOKEN !== undefined) env.CLAUDE_CODE_OAUTH_TOKEN = host.CLAUDE_CODE_OAUTH_TOKEN;
+  return env;
 }
 
 // 허용 목록만 넘긴다. 실행자 환경의 ANTHROPIC_MODEL, CLAUDE_CODE_EFFORT_LEVEL 같은 값은 들어가지 않는다.
@@ -93,7 +109,7 @@ export function summarizeStream(text: string): StreamSummary {
   return s;
 }
 
-export type ErrorKind = 'budget_exceeded' | 'api_error' | 'usage_limit' | 'signal' | 'other';
+export type ErrorKind = 'budget_exceeded' | 'api_error' | 'usage_limit' | 'oom' | 'signal' | 'other';
 
 export type AgentClass =
   | { state: 'agent_succeeded'; error_kind: null }
@@ -130,11 +146,25 @@ function errorKind(result: Record<string, unknown> | null, stderr: string): Erro
 
 // Agent process 의 종료를 실행 계약 §6.3 의 상태로 나눈다. 외부 원인 근거로 쓰는 것은 잠자기 감지뿐이다.
 // 컨테이너 단계에서 OOM · Docker daemon 재시작 근거를 더한다
-export function classifyAgent(p: ProcessResult, stream: StreamSummary, stderr: string): AgentClass {
+// 컨테이너로 실행했을 때 docker inspect 로 얻은 값. local 실행에서는 없다
+export interface ContainerExit {
+  found: boolean;
+  exit_code: number | null;
+  oom_killed: boolean;
+  error: string;
+}
+
+export function classifyAgent(p: ProcessResult, stream: StreamSummary, stderr: string, container: ContainerExit | null = null): AgentClass {
   if (p.spawn_error !== null) return { state: 'harness_failed', stage: 'agent_start', reason: `Agent 를 시작하지 못했다: ${p.spawn_error}` };
+  if (container !== null && !container.found) return { state: 'harness_failed', stage: 'agent_start', reason: `Agent 컨테이너를 만들지 못했다(docker exit ${p.exit_code})` };
+  if (container !== null && container.error !== '') return { state: 'harness_failed', stage: 'agent', reason: `Docker 가 컨테이너 오류를 보고했다: ${container.error}` };
   if (p.suspended) return { state: 'harness_failed', stage: 'agent', reason: `host 잠자기 감지(wall ${p.wall_ms}ms, monotonic ${p.mono_ms}ms)` };
   if (p.timed_out) return { state: 'timed_out', error_kind: null };
+  // 메모리 제한은 실행 조건이므로 Agent 가 비정상 종료했고 OOM 이면 관찰 결과다(실행 계약 §6.3)
+  if (container !== null && container.oom_killed && container.exit_code !== 0) return { state: 'agent_failed', error_kind: 'oom' };
   if (p.signal !== null) return { state: 'agent_failed', error_kind: 'signal' };
+  // 컨테이너 안 process 가 signal 로 끝나면 종료 코드가 128 + signal 번호다
+  if (container !== null && container.exit_code !== null && container.exit_code > 128) return { state: 'agent_failed', error_kind: 'signal' };
   const resultError = stream.result !== null && (stream.result.is_error === true || (typeof stream.result.subtype === 'string' && stream.result.subtype !== 'success'));
   if (p.exit_code === 0 && !resultError) return { state: 'agent_succeeded', error_kind: null };
   return { state: 'agent_failed', error_kind: errorKind(stream.result, stderr) };

@@ -94,9 +94,9 @@ Variant 보다 먼저 쓴다. 과제 문구도 이 단계에서 먼저 고정한
   - 완료 조건: 실제 Claude 호출 없이 가짜 process 로 정상 종료, Agent 비정상 종료, timeout, 채점 성공 · 실패, harness 내부 오류를 자동 시험으로 확인한다
 - [x] Docker Desktop VM 메모리 20GB 이상(2026-10-03 완료, 실행 계약 §4.1)
 - [ ] 실험 기간 Docker Desktop 자동 갱신 끄기(실행 계약 §4.1)
-- [ ] 컨테이너 연결 경로: workspace, 빈 `CLAUDE_CONFIG_DIR`, hook 출력, 읽기 전용 `/opt/cc/` 만 연결(실행 계약 §4.3)
+- [x] 컨테이너 연결 경로: workspace, 빈 `CLAUDE_CONFIG_DIR`, hook 출력, 읽기 전용 `/opt/cc/` 만 연결(실행 계약 §4.3)
   - 완료 조건: 컨테이너 안의 환경 변수 · 연결 경로 · hostname · `/opt/cc/` 파일 내용에 `agentic`, `variant`, `실험`, `experiment`, Variant 코드가 없다
-- [ ] OOM · 외부 원인 종료 판정(`docker inspect`, `docker events`)과 재채점(`stage = after_agent` 실행을 source commit + `final.patch` 복사본으로 다시 채점, 최대 2회) (실행 계약 §6.3, §7)
+- [x] OOM · 외부 원인 종료 판정(`docker inspect`, `docker events`)과 재채점(`stage = after_agent` 실행을 source commit + `final.patch` 복사본으로 다시 채점, 최대 2회) (실행 계약 §6.3, §7)
 
 - [x] 컨테이너 이미지: JDK, Node, pnpm, Playwright Chromium, 고정 글꼴, Claude Code 고정 버전, `TZ=Asia/Seoul`, `LANG=ko_KR.UTF-8`, non-root 사용자
   - 완료 조건: 이미지 digest 를 `lab/harness/image.lock` 에 기록
@@ -105,14 +105,15 @@ Variant 보다 먼저 쓴다. 과제 문구도 이 단계에서 먼저 고정한
 - [ ] egress 제한: Anthropic API 도메인만 허용
   - 완료 조건: 컨테이너 안에서 `curl https://registry.npmjs.org` 가 실패하고 Claude Code 호출은 성공
   - 결과(2026-10-03): `image/start.sh` 적용. npm · GitHub · host 차단, `api.anthropic.com` HTTP 405, Agent 권한(uid 1000, CapEff 0)으로 규칙 변경 거부. Claude Code 호출 성공은 pilot 에서 확인
-- [ ] `export.sh <variant>`: 설계 §15.1
+- [x] `export.sh <variant>`: 설계 §15.1
   - 완료 조건: 내보낸 저장소에서 `agentic`, `variant`, `실험`, `experiment` 검색 결과 0건, commit 1개, `CLAUDE.md` · `AGENTS.md` · `.claude/` 없음
 - [ ] `run.sh <task> <variant> <run-id>`: clone, 의존성 offline 설치, Claude Code 실행, 결과 수집
+  - 결과(2026-10-03): 실행 명령은 `lab/harness/src/cli.ts`(`pnpm lab run` · `regrade` · `rebuild-result`). 인자와 시간 제한은 계약대로 구현했다. `GRADLE_USER_HOME` · `wrapper/dists` 복사와 의존성 offline 설치는 7단계 cache 이미지와 함께 한다
   - 완료 조건: 실행마다 빈 `CLAUDE_CONFIG_DIR`, `--strict-mcp-config`, `--settings`(기록용 hook), `--dangerously-skip-permissions`(non-root 컨테이너와 egress 제한 조건에서만, 설계 §15.3), `--session-id`, `--output-format stream-json --verbose --include-hook-events`, `--model`, `--effort`, `--max-budget-usd`, 시간 제한 45분
   - 완료 조건: 실행마다 빈 `GRADLE_USER_HOME` 을 만들고 이미지의 `wrapper/dists` 를 복사한다. `GRADLE_RO_DEP_CACHE` 는 이미지 안 root 소유 경로를 가리킨다(설계 §15.2, 실행 계약 §4.3). cache 내용은 7단계에서 채운다
-- [ ] 기록용 hook: `PreToolUse` · `PostToolUse` 입력에 기록 시각을 붙여 `hooks.jsonl` 에 추가. 시험 명령이면 그 명령 시작 이후 수정된 시험 결과 파일만 복사(설계 §14.3)
+- [x] 기록용 hook: `PreToolUse` · `PostToolUse` 입력에 기록 시각을 붙여 `hooks.jsonl` 에 추가. 시험 명령이면 그 명령 시작 이후 수정된 시험 결과 파일만 복사(설계 §14.3)
   - 완료 조건: hook 이 표준 출력에 아무것도 쓰지 않고 항상 exit 0
-- [ ] stream 수신 시각 기록: 원본 줄을 바꾸지 않고 줄마다 수신 시각을 별도 파일에 쓴다(실행 계약 §8.4)
+- [x] stream 수신 시각 기록: 원본 줄을 바꾸지 않고 줄마다 수신 시각을 별도 파일에 쓴다(실행 계약 §8.4)
 - [ ] 빈 저장소로 pilot 1회
   - 완료 조건: `runs/<run_id>/` 에 harness 가 만드는 파일(`run.json`, `result.json`, `raw/agent/stdout.jsonl`, 세션 기록, hook 기록, `artifacts/final.patch`)이 생긴다(실행 계약 §8.2). `verify.json`, `grading.json`, `metrics.json`, `review.json` 은 4 · 7단계 이후에 생기므로 이 단계의 조건이 아니다
 

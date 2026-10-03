@@ -129,12 +129,12 @@ export function fixture(agentBody: string, graderBody = 'pass'): Fixture {
     id: 'exec-test',
     agent: {
       executable: agent, version: '2.1.287', model: 'claude-opus-5-5', subagent_model: 'claude-opus-5-5',
-      effort: 'medium', max_budget_usd: 15, disallowed_tools: ['WebSearch', 'WebFetch'], settings_file: null,
+      effort: 'medium', max_budget_usd: 15, disallowed_tools: ['WebSearch', 'WebFetch'], settings_file: null, hook_files: [],
     },
     timeouts_ms: { prepare: 30_000, agent: 10_000, grace: 300, grading_normative: 10_000, grading_diagnostic: 10_000 },
     retry: { max_attempts: 3 },
     grading: { run_script: grader },
-    environment: { image: null, platform: 'linux/arm64', cpus: 4, memory: '8g' },
+    environment: { runtime: 'local', image: null, platform: 'linux/arm64', cpus: 4, memory: '8g' },
   };
   const tasks: Record<string, TaskDef> = {
     exp1: { experiment: 'exp1', prompt, grading: { normative: ['exp1'], diagnostic: [] } },

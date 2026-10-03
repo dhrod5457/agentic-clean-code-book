@@ -17,6 +17,8 @@ export interface ExecConfig {
     max_budget_usd: number;
     disallowed_tools: string[];
     settings_file: string | null;
+    // settings 가 부르는 hook 스크립트. 내용이 실행 조건 hash 에 들어간다
+    hook_files: string[];
   };
   timeouts_ms: {
     prepare: number;
@@ -27,7 +29,8 @@ export interface ExecConfig {
   };
   retry: { max_attempts: number };
   grading: { run_script: string };
-  environment: { image: string | null; platform: string; cpus: number; memory: string };
+  // runtime: docker 는 실제 실행(실행 계약 §4), local 은 컨테이너 없이 가짜 process 로 orchestration 만 시험할 때 쓴다
+  environment: { runtime: 'docker' | 'local'; image: string | null; platform: string; cpus: number; memory: string };
 }
 
 export interface TaskDef {
@@ -48,6 +51,9 @@ export interface RunSpec {
 }
 
 export class SpecError extends Error {}
+
+// Agent 가 볼 수 있는 곳에 있으면 안 되는 문자열(설계 §15.1, 실행 계약 §4.3)
+export const FORBIDDEN = /agentic|variant|실험|experiment/i;
 
 export function loadJson<T>(file: string): T {
   return JSON.parse(readFileSync(file, 'utf8')) as T;
@@ -70,7 +76,7 @@ export function canonicalJson(value: unknown): string {
 
 // 실행 설정과 설정이 가리키는 파일 내용까지 묶은 hash. 같은 실험 ID 의 실행은 모두 같아야 한다
 export function conditionHash(config: ExecConfig, labRoot: string): string {
-  const referenced = [config.agent.settings_file]
+  const referenced = [config.agent.settings_file, ...config.agent.hook_files]
     .filter((p): p is string => p !== null)
     .map((p) => `${p}:${sha256(readFileSync(path.resolve(labRoot, p)))}`);
   return sha256(`${canonicalJson(config)}\n${referenced.join('\n')}`);

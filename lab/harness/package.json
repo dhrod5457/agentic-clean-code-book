@@ -3,10 +3,13 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.34.6",
-  "engines": { "node": ">=22.18.0" },
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "scripts": {
     "test": "node --test \"test/*.test.ts\"",
-    "typecheck": "tsc --noEmit -p ."
+    "typecheck": "tsc --noEmit -p .",
+    "lab": "node src/cli.ts"
   },
   "devDependencies": {
     "@types/node": "24.19.1",

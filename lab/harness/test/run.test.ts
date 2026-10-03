@@ -6,7 +6,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { SpecError } from '../src/config.ts';
 import { buildResult, RAW } from '../src/normalize.ts';
-import { executeRun, executeWithRetry } from '../src/run.ts';
+import { executeRun, executeWithRetry, regradeRun } from '../src/run.ts';
 import type { Clock } from '../src/process.ts';
 import { AGENT_OK, fixture, readArgv, readEnv, STREAM_OK, tmp } from './helpers.ts';
 
@@ -490,4 +490,40 @@ test('한도 해제 뒤 이어서 실행해도 반복 번호당 재실행 상한
   assert.equal(missing, true);
   assert.equal(runs[0].result.identity.attempt, 4);
   assert.equal(runs[0].result.identity.retry_of, 'prev-run');
+});
+
+test('판정 결과가 없는 실행은 재채점하면 회차 1 의 판정이 기록되고, Agent 상태는 바뀌지 않으며 최대 2회다', async () => {
+  const f = fixture(AGENT_OK);
+  const { createServer } = await import('node:net');
+  const server = createServer();
+  await new Promise<void>((r) => server.listen(f.spec().port, r));
+  const { runDir, result: first } = await executeRun(f.spec(), f.opts);
+  server.close();
+  assert.equal(first.grading.outcome, null);
+  const { result } = await regradeRun(runDir, { labRoot: f.labRoot });
+  assert.equal(result.state, 'harness_failed');
+  assert.equal(result.agent.outcome, 'agent_succeeded');
+  assert.equal(result.regrade_rounds, 1);
+  assert.equal(result.grading.outcome, 'passed');
+  assert.equal(result.grading.normative[0].decided_round, 1);
+  assert.equal(existsSync(path.join(runDir, 'grading-workspace/1/shop-admin/added.txt')), true);
+  // 이미 판정이 있으면 더 재채점하지 않는다
+  await assert.rejects(regradeRun(runDir, { labRoot: f.labRoot }), /판정 결과가 없는 묶음이 없다/);
+});
+
+test('재채점은 harness_failed(after_agent) 실행에만 하고 회차 2 를 넘지 않는다', async () => {
+  const done = fixture(AGENT_OK);
+  const { runDir: completed } = await executeRun(done.spec(), done.opts);
+  await assert.rejects(regradeRun(completed, { labRoot: done.labRoot }), /재채점 대상이 아니다/);
+
+  const f = fixture(AGENT_OK);
+  const { createServer } = await import('node:net');
+  const server = createServer();
+  await new Promise<void>((r) => server.listen(f.spec().port, r));
+  const { runDir } = await executeRun(f.spec(), f.opts);
+  // port 가 계속 사용 중이면 재채점도 판정을 내지 못한다
+  await regradeRun(runDir, { labRoot: f.labRoot });
+  await regradeRun(runDir, { labRoot: f.labRoot });
+  server.close();
+  await assert.rejects(regradeRun(runDir, { labRoot: f.labRoot }), /최대 2회/);
 });
