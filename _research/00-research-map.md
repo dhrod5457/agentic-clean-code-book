@@ -287,3 +287,19 @@ Clean Code만 보지 않고 다음 전통을 함께 본다.
 - 최종 목표는 `worktree per agent`가 아니라 `isolation level per task`를 기계적으로 선택하는 것이다.
 
 상세: `18-worktree-minimization.md`
+
+
+### Worktree 연구의 후속 보정 — Write Scope보다 Reasoning Dependency가 넓다
+
+추가 조사에서 STORM 연구를 통해 병렬 안전성을 write scope만으로 판단하면 부족하다는 점이 확인됐다.
+
+Agent A가 file X를 수정하고 Agent B가 file Y를 수정하더라도, A가 판단에 사용한 shared contract를 B가 변경하면 A의 수정은 stale context 위에서 만들어질 수 있다.
+
+따라서 RQ3에 다음 하위 질문을 추가한다.
+
+- 서로 다른 Agent의 readSet/writeSet overlap을 어떻게 측정할 것인가?
+- shared contract가 많은 구조는 same-file conflict가 없어도 병렬성을 떨어뜨리는가?
+- optimistic shared state와 pessimistic worktree isolation 사이를 runtime에 전환할 수 있는가?
+- Worktree를 없애는 것과 Worktree 자체를 싸게 만드는 것 중 어느 쪽이 실제 throughput에 유리한가?
+
+상세: 19-shared-workspace-vs-worktree.md
