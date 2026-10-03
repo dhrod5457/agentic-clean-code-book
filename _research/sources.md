@@ -337,3 +337,181 @@
 8. frontend coding agent의 visual feedback 연구
 9. secure sandbox / least privilege / supply-chain risk
 10. AI-generated code의 duplication, maintainability, architecture drift 실증 연구
+
+
+## H. Classic Design / Change Coupling / Fitness Functions
+
+### H1. Robert C. Martin — Clean Code, 1st / 2nd edition
+
+- URL:
+  - https://www.pearson.com/en-us/subject-catalog/p/clean-code-a-handbook-of-agile-software-craftsmanship/P200000009044
+  - https://www.pearson.com/en-us/subject-catalog/p/clean-code-a-handbook-of-agile-software-craftsmanship-2nd-edition/P200000013239
+- 핵심:
+  - searchable names
+  - small functions/classes
+  - side-effect reduction
+  - clean boundaries
+  - tests
+  - organizing for change
+- 책에서의 용도:
+  - Agentic Clean Code가 무엇을 계승하고 어디서 범위를 확장하는지 비교 기준
+
+### H2. Martin Fowler — Definition of Refactoring / Refactoring
+
+- URL:
+  - https://martinfowler.com/bliki/DefinitionOfRefactoring.html
+  - https://martinfowler.com/books/refactoring.html
+- 핵심:
+  - observable behavior를 유지하면서 이해 가능성과 변경 용이성을 높임
+- 책에서의 용도:
+  - Agentic Refactoring = 다음 Agent의 탐색·context·변경 비용 감소로 확장
+
+### H3. Thoughtworks — Architectural Fitness Function
+
+- URL: https://www.thoughtworks.com/en-us/radar/techniques/architectural-fitness-function
+- 핵심:
+  - architecture characteristic를 metrics/tests/monitor 등으로 객관적으로 검증
+- 책에서의 용도:
+  - Agentic rule을 prose가 아니라 executable rule로 만드는 선행 개념
+
+### H4. Co-change patterns: A large scale empirical study
+
+- URL: https://doi.org/10.1016/j.jss.2019.03.014
+- Scope: 133 GitHub projects, 6 languages
+- 핵심:
+  - repository history의 co-change cluster로 modularity/change propagation을 분석
+- 책에서의 용도:
+  - change coupling
+  - hidden dependency
+  - Hot File / blast radius metric 근거
+
+### H5. DORA — Loosely Coupled Teams
+
+- URL: https://dora.dev/capabilities/loosely-coupled-teams/
+- 핵심:
+  - 다른 팀과 세밀한 coordination 없이 변경·테스트·배포 가능한 architecture
+- 책에서의 용도:
+  - Team autonomy를 Agent task autonomy로 재해석
+
+## I. Test Determinism / Diagnostic Reliability
+
+### I1. Google — Test Flakiness
+
+- URL: https://testing.googleblog.com/2020/12/test-flakiness-one-of-main-challenges.html
+- 핵심:
+  - test/application/dependency/OS까지 flakiness 원인
+  - hermetic test environment가 external dependency를 제거
+- 책에서의 용도:
+  - verifier reliability
+
+### I2. Google — Where do our flaky tests come from?
+
+- URL: https://testing.googleblog.com/2017/04/where-do-our-flaky-tests-come-from.html
+- 핵심:
+  - larger tests와 flakiness 사이 강한 연관 관찰
+- 책에서의 용도:
+  - small/fast/local verifier 논거
+
+### I3. Systemic Flakiness
+
+- URL: https://arxiv.org/abs/2504.16777
+- Date: 2025
+- 핵심:
+  - flaky tests가 cluster로 나타나는 systemic flakiness
+  - network/external dependency가 주요 원인으로 관찰
+- 책에서의 용도:
+  - Agent feedback channel contamination
+
+### I4. Google Research — De-Flake Your Tests
+
+- URL: https://research.google/pubs/de-flake-your-tests-automatically-locating-root-causes-of-flaky-tests-in-code-at-google/
+- 핵심:
+  - 428 projects 대상 code-level flaky root-cause localization
+  - case studies에서 82% accuracy 보고
+- 책에서의 용도:
+  - machine diagnosability / automated localization
+
+## J. AI Code Maintainability / Multi-Agent Coordination
+
+### J1. Debt Behind the AI Boom
+
+- URL: https://arxiv.org/abs/2603.28592
+- Date: 2026
+- Scope: 304,362 verified AI-authored commits, 6,275 repositories
+- 핵심:
+  - AI-authored changes가 code smell/bug/security issue를 도입하고 일부가 장기간 잔존
+- 책에서의 용도:
+  - Entropy Resistance / Continuous Cleanup
+
+### J2. Quality Assurance of LLM-generated Code
+
+- URL: https://arxiv.org/abs/2511.10271
+- 핵심:
+  - functional correctness와 non-functional quality를 분리
+  - industry에서는 maintainability/readability를 중요하게 봄
+- 책에서의 용도:
+  - test pass != quality
+
+### J3. Is Agent Code Less Maintainable Than Human Code?
+
+- URL: https://arxiv.org/abs/2606.21804
+- Date: 2026
+- 핵심:
+  - 후속 Agent가 agent-generated code 위에서 작업할 때 task resolve rate가 최대 13.1% 감소
+  - 전통적인 maintainability metric만으로 차이를 충분히 설명하지 못함
+- 책에서의 용도:
+  - Agent-to-Agent maintainability라는 새로운 품질 관점
+
+### J4. CooperBench
+
+- URL: https://arxiv.org/abs/2601.13295
+- Date: 2026
+- 핵심:
+  - collaborative coding에서 평균적으로 solo보다 성공률 저하
+  - communication만으로 coordination failure를 충분히 해결하지 못함
+- 책에서의 용도:
+  - Parallel Changeability
+  - coordination requirement 자체를 줄이는 architecture
+
+### J5. AsynCodeBench
+
+- URL: https://arxiv.org/abs/2609.32662
+- Date: 2026
+- 핵심:
+  - final task success와 별도로 cross-agent dependency resolution을 측정
+  - explicit dependency checker 제안
+- 책에서의 용도:
+  - Task dependency를 first-class executable artifact로 다루는 근거
+
+### J6. Code Review Agent Benchmark
+
+- URL: https://arxiv.org/abs/2603.23448
+- Date: 2026
+- 핵심:
+  - code generation 증가에 따라 review/QA가 별도 agent capability가 됨
+  - 평가한 review agents를 합쳐도 benchmark task의 약 40% 수준 해결
+- 책에서의 용도:
+  - generation throughput만 늘리는 것으로 quality pipeline이 해결되지 않음
+
+### J7. Not All Agents Are Equal
+
+- URL: https://arxiv.org/abs/2609.17598
+- Date: 2026
+- Scope: 37,623 provenance-labeled PRs, 2,807 repositories
+- 핵심:
+  - agent별 quality/post-merge behavior 차이가 큼
+- 책에서의 용도:
+  - "AI code"를 하나의 단일 품질 범주로 일반화하지 않기 위한 반례
+
+## 갱신된 다음 수집 우선순위
+
+1. Architecture drift / dependency erosion 장기 연구
+2. AI agent PR의 실제 concurrent merge conflict 실증 연구 원문 확인
+3. semantic conflict / stale contract 연구
+4. build/test affected-selection 연구
+5. UI coding agent와 visual feedback의 직접 비교 연구
+6. secure sandbox / least privilege / supply-chain risk
+7. generated code / lockfile / schema hot-file 충돌 사례
+8. Agent task specification quality 및 requirement smell
+9. long-running agent continuity / handoff artifact
+10. 실제 프로젝트를 대상으로 한 Task Surface 실험 설계
