@@ -105,10 +105,11 @@ Variant 보다 먼저 쓴다. 과제 문구도 이 단계에서 먼저 고정한
   - 결과(2026-10-03): `lab/harness/image/Dockerfile`, id `sha256:ea03f941…`. 이미지 안 Storybook smoke 에서 `Default` 통과, `Must Fail` 실패(exit 1)
   - 결과(2026-10-03, 9차 검토 반영): `start.sh` 만 바꿔 다시 build, id `sha256:8388f614…`. 층 1 ~ 10 은 이전 이미지와 같다. `docker save` 사본과 sha256 을 `image.lock` 의 `saved` 에 기록
   - 완료 조건: 설계 §3.5 의 Storybook smoke(story 1개 통과, 음성 대조 실패)를 이미지 안에서 다시 실행해 같은 결과가 나온다. 확인용 프로젝트는 삭제한다
-- [ ] egress 제한: Anthropic API 도메인만 허용
+- [x] egress 제한: Anthropic API 도메인만 허용
   - 완료 조건: 컨테이너 안에서 `curl https://registry.npmjs.org` 가 실패하고 Claude Code 호출은 성공
   - 결과(2026-10-03): `image/start.sh` 적용. npm · GitHub · host 차단, `api.anthropic.com` HTTP 405, Agent 권한(uid 1000, CapEff 0)으로 규칙 변경 거부. Claude Code 호출 성공은 pilot 에서 확인
   - 결과(2026-10-03, 9차 검토 반영): DNS 를 `/etc/resolv.conf` 의 resolver 로 한정(`dig @1.1.1.1` 실패), 설정 실패 시 명령 없이 exit 90
+  - 결과(2026-10-03, pilot-1): 같은 제한 아래에서 Claude Code 호출이 성공했다(`agent_succeeded`, 아래 pilot 항목)
 - [x] `export.sh <variant>`: 설계 §15.1
   - 완료 조건: 내보낸 저장소에서 `agentic`, `variant`, `실험`, `experiment` 검색 결과(파일 내용 · binary · 경로 이름) 0건, commit 1개, 하위 디렉터리를 포함해 `CLAUDE.md` · `CLAUDE.local.md` · `AGENTS.md` · `.claude/` 없음
 - [ ] `run.sh <task> <variant> <run-id>`: clone, 의존성 offline 설치, Claude Code 실행, 결과 수집
