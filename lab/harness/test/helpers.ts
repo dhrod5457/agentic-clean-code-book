@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { ExecConfig, RunSpec, TaskDef } from '../src/config.ts';
@@ -8,8 +8,16 @@ import type { RunOptions } from '../src/run.ts';
 
 // 가짜 Agent · 가짜 채점 스크립트와 임시 저장소. 실제 Claude 와 Variant 애플리케이션 없이 orchestration 만 시험한다
 
+const created: string[] = [];
+// 시험 process 가 끝나면 이 파일이 만든 임시 디렉터리를 지운다
+process.on('exit', () => {
+  for (const dir of created) rmSync(dir, { recursive: true, force: true });
+});
+
 export function tmp(prefix = 'harness-'): string {
-  return mkdtempSync(path.join(tmpdir(), prefix));
+  const dir = mkdtempSync(path.join(tmpdir(), prefix));
+  created.push(dir);
+  return dir;
 }
 
 export function writeScript(file: string, body: string): string {
