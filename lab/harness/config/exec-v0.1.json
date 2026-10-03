@@ -7,7 +7,10 @@
     "subagent_model": "claude-opus-5-5",
     "effort": "medium",
     "max_budget_usd": 15,
-    "disallowed_tools": ["WebSearch", "WebFetch"],
+    "disallowed_tools": [
+      "WebSearch",
+      "WebFetch"
+    ],
     "settings_file": null
   },
   "timeouts_ms": {
@@ -17,7 +20,16 @@
     "grading_normative": 1800000,
     "grading_diagnostic": 900000
   },
-  "retry": { "max_attempts": 3 },
-  "grading": { "run_script": "lab/grading/run.sh" },
-  "environment": { "image": null, "platform": "linux/arm64", "cpus": 4, "memory": "8g" }
+  "retry": {
+    "max_attempts": 3
+  },
+  "grading": {
+    "run_script": "lab/grading/run.sh"
+  },
+  "environment": {
+    "image": "sha256:ea03f9418cfc1afe95e4682298854c26407b8376e8b75dfed44fdbe4b789e8ff",
+    "platform": "linux/arm64",
+    "cpus": 4,
+    "memory": "8g"
+  }
 }

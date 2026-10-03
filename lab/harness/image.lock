@@ -1,0 +1,16 @@
+{
+  "image": "lab-runner:dev",
+  "id": "sha256:ea03f9418cfc1afe95e4682298854c26407b8376e8b75dfed44fdbe4b789e8ff",
+  "platform": "linux/arm64",
+  "built_at": "2026-10-03T08:57:25Z",
+  "base": "eclipse-temurin:25.0.4.1_1-jdk-noble@sha256:0d623ea18d7b0fe1e12a2c0a920f7e950cad433387e5a49d3611e1507fa07602",
+  "dockerfile_sha256": "f0b27f270f284edff0e4d0116b32cb4a19f6d22bed1e6848cd68cf4a0f7b5b9f",
+  "start_sh_sha256": "580273c35385dde6404af224dd225088023b2db6911c1cbde061349f3354ca0b",
+  "contents": { "java": "25.0.4.1", "node": "24.21.0", "pnpm": "10.34.6", "claude_code": "2.1.287", "playwright_chromium": "1.63.0 (chromium-1243)" },
+  "verified": [
+    "Storybook smoke: Default 통과, MustFail 실패(Unable to find ... 수정), vitest exit 1",
+    "egress: registry.npmjs.org · github.com · host.docker.internal 차단, api.anthropic.com HTTP 405",
+    "Agent 권한: uid 1000 agent, CapEff 0, iptables 변경 거부"
+  ],
+  "note": "apt 패키지는 버전을 고정하지 않으므로 다시 build 하면 id 가 달라진다. 실험에는 이 id 의 이미지를 쓴다. 체크리스트 7단계에서 의존성 cache 층을 더한 이미지로 바꾼다"
+}

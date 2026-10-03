@@ -1,7 +1,7 @@
 # 실험 실행 계약 v0.1
 
 작성일: 2026-10-03
-상태: **FROZEN** (2026-10-03, 구독 인증 변경 후 재확정). 판정 근거는 §12 8차. 이후 바꾸면 상태를 REVIEWED 로 되돌리고 §11 · §12 에 이유를 적는다.
+상태: **REVIEWED** (2026-10-03). 구독 token 전달 방식을 파일로 바꿨다(§4.4). 컨테이너 단계 변경과 함께 재검토한다.
 기준 설계: `_design/experiment-codebase-design-v0.1.md` (이하 "설계")
 
 이 문서는 설계 §19.2 의 Phase 0B 결정과, A/B 실행에서 Variant 이외의 조건을 고정하는 방법을 정한다.
@@ -75,7 +75,7 @@ A 와 B 의 실행은 아래 값이 모두 같다. "강제" 열은 harness 가 �
 Agent 환경 변수 허용 목록:
 - 고정 값: `TZ=Asia/Seoul`, `LANG=ko_KR.UTF-8`, `DISABLE_AUTOUPDATER=1`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, subagent 모델 2개, `CLAUDE_CONFIG_DIR`
 - 컨테이너 단계에서 더하는 값: `GRADLE_USER_HOME`, `GRADLE_RO_DEP_CACHE`, `PLAYWRIGHT_BROWSERS_PATH`(설계 §15.2)
-- 실행자 환경에서 넘기는 값: `CLAUDE_CODE_OAUTH_TOKEN` 뿐이다. `ANTHROPIC_API_KEY` 는 넘기지 않는다(§4.4)
+- 실행자 쪽에서 넘기는 값: `CLAUDE_CODE_OAUTH_TOKEN` 뿐이다. harness 가 token 파일에서 읽는다(§4.4). `ANTHROPIC_API_KEY` 는 넘기지 않는다
 - `PATH` 와 `HOME=/home/agent` 는 이미지 값을 쓴다. 3단계 host 골격만 실행자의 `PATH` · `HOME` 을 넘긴다
 
 `WebSearch` · `WebFetch` 를 빼는 이유: 이 연구 저장소는 GitHub 에 공개돼 있고(`dhrod5457/agentic-clean-code-book`, PUBLIC) 설계와 숨김 채점이 들어 있다. `WebSearch` 는 Anthropic 서버에서 실행되므로 컨테이너 egress 제한으로 막히지 않는다. 두 Variant 에 같게 적용한다.
@@ -101,6 +101,7 @@ Agent 환경 변수 허용 목록:
 
 ## 4.2 컨테이너와 동시 실행
 
+- 컨테이너는 root 와 `NET_ADMIN` · `NET_RAW` capability 로 시작한다. 이미지의 시작 스크립트(`/usr/local/sbin/start.sh`)가 외부 통신을 DNS · loopback · `api.anthropic.com` 의 443 port 로 제한하고, 모든 capability 를 버린 뒤 `agent`(uid 1000) 로 명령을 실행한다. Agent 는 규칙을 바꿀 수 없다. 공식 dev container 의 `init-firewall.sh` 와 달리 host 네트워크 · SSH · npm · GitHub 을 허용하지 않는다
 - 실행 1개는 준비부터 채점까지 동시 실행 자리 하나를 쓴다. Agent 컨테이너와 채점 컨테이너는 모두 CPU 4개, 메모리 8GB, non-root 사용자(설계 §15.2)이고 한 실행 안에서 순서대로 실행한다. CPU · 메모리 제한은 실행 설정 파일의 `environment` 에 있어 실행 조건 hash 에 포함된다
 - 실험 1 · 3: 한 번에 1개(설계 §14.6)
 - 실험 2: 한 회의 8개 실행을 같은 기준 commit 에서 2개씩 실행한다. 실행마다 별도 clone 과 별도 컨테이너를 쓰고 서로의 작업을 볼 수 없으므로, 동시 실행 수는 쌍별 3-way merge 결과에 영향을 주지 않는다. 동시 8개는 32 CPU · 64GB 가 필요해 이 기계에서 실행할 수 없다
@@ -127,7 +128,7 @@ Gradle 읽기 전용 cache(`GRADLE_RO_DEP_CACHE`)와 Playwright 브라우저는 
 
 ## 4.4 인증
 
-- 사용자의 Claude Max 구독으로 실행한다. 실행 기계에서 `claude setup-token` 을 한 번 실행해 장기 인증 token(유효기간 1년)을 만들고, 실행자 shell 의 환경 변수 `CLAUDE_CODE_OAUTH_TOKEN` 에서 컨테이너로 `-e CLAUDE_CODE_OAUTH_TOKEN` 으로 넘긴다. 저장소, 이미지, 실행 설정 파일, `run.json`, fingerprint 에 값을 쓰지 않는다(https://code.claude.com/docs/en/authentication 「Generate a long-lived token」)
+- 사용자의 Claude Max 구독으로 실행한다. 실행 기계에서 `claude setup-token` 을 한 번 실행해 장기 인증 token(유효기간 1년)을 만들고, 저장소 밖 파일 `~/.config/agentic-lab/claude-oauth-token`(권한 600)에 둔다. harness 가 실행할 때만 이 파일을 읽어 Agent 컨테이너에 `CLAUDE_CODE_OAUTH_TOKEN` 으로 넘긴다. shell 시작 파일에 `export` 하지 않는다. 이 환경 변수는 `/login` 보다 우선해서 같은 기계의 다른 Claude Code 세션 인증까지 바꾸기 때문이다. 저장소, 이미지, 실행 설정 파일, `run.json`, fingerprint 에 값을 쓰지 않는다(https://code.claude.com/docs/en/authentication 「Generate a long-lived token」)
 - `CLAUDE_CODE_OAUTH_TOKEN` 보다 우선하는 인증 수단을 Agent 환경에 두지 않는다. 우선순위는 `CLAUDE_CODE_USE_BEDROCK` · `VERTEX` · `FOUNDRY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_API_KEY`, `apiKeyHelper`, `CLAUDE_CODE_OAUTH_TOKEN` 순이고, `-p` 실행에서는 `ANTHROPIC_API_KEY` 가 있으면 항상 그 key 로 인증된다(같은 문서 「Authentication precedence」)
 - 준비 단계에서 Agent 와 같은 환경 변수와 `--settings` 로 `claude auth status --json` 을 실행해 `authMethod` 가 `oauth_token` 인지 확인한다. 다르거나 token 이 없으면 `harness_failed(prepare)` 다. 이 명령은 모델을 호출하지 않는다. Agent 의 설정 디렉터리를 비워 두려고 별도의 빈 설정 디렉터리에서 실행하고, 컨테이너 단계에서는 이미지 환경 변수까지 반영되도록 Agent 컨테이너 안에서 실행한다
 - **usage credits 를 끈다.** Max 구독은 사용 한도를 넘으면 usage credits 로 API 단가 과금을 이어갈 수 있고(기본값 꺼짐), 그때부터 prompt cache 수명이 1시간에서 5분으로 바뀐다(https://code.claude.com/docs/en/costs 「Why usage climbs」). 실험 도중 실행 조건이 바뀌므로, 실행자가 각 실험 시작 전 claude.ai Settings 의 Usage 에서 usage credits 가 꺼져 있는지 확인하고 확인 시각을 실험 기록에 남긴다
@@ -440,6 +441,8 @@ fingerprint 는 clone 전에 남겨 준비 단계 실패 실행에도 기록이 
 | 2026-10-03 | 인증을 API key 에서 사용자의 Claude Max 구독(`CLAUDE_CODE_OAUTH_TOKEN`)으로 변경, USD 전체 예산을 구독 사용 한도 기준 실행 수로 변경, 사용 한도 도달 분류 | 사용자 결정 |
 | 2026-10-03 | 사용 한도 도달을 `usage_limit` 로 분리하고 재실행 상한에서 제외, 준비 단계 인증 수단 확인, usage credits 꺼짐 확인, 인증 우선순위 명시, 계산 비용 추정을 1시간 cache 기준으로, 같은 계정 사용 금지 범위 | 구독 인증 변경 독립 검토(§12 7차) |
 | 2026-10-03 | 인증 확인의 설정 디렉터리 분리와 `--settings` 전달, 이어서 실행할 때의 상한 계산, 이어가지 못한 `usage_limit` 반복의 결측 처리, §2 · §5.2 · §6.3 문구 | 구독 인증 변경 재확인(§12 8차) |
+| 2026-10-03 | 구독 token 을 shell 환경 변수 대신 저장소 밖 token 파일에서 harness 가 읽어 넘김. 2026-10-03 token 파일 생성(권한 600)과 `auth status` 의 `oauth_token` 확인, 사용자가 usage credits 를 끈 것으로 보고 | 사용자 설정 |
+| 2026-10-03 | 실행 이미지 build(`image.lock`, id `sha256:ea03f941…`)와 실행 설정 `environment.image` 기록, 컨테이너 시작 방식(root 로 egress 제한 후 agent 로 권한 낮춤) | 체크리스트 3단계 이미지 · egress 항목 |
 
 ---
 

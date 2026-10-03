@@ -98,11 +98,13 @@ Variant 보다 먼저 쓴다. 과제 문구도 이 단계에서 먼저 고정한
   - 완료 조건: 컨테이너 안의 환경 변수 · 연결 경로 · hostname · `/opt/cc/` 파일 내용에 `agentic`, `variant`, `실험`, `experiment`, Variant 코드가 없다
 - [ ] OOM · 외부 원인 종료 판정(`docker inspect`, `docker events`)과 재채점(`stage = after_agent` 실행을 source commit + `final.patch` 복사본으로 다시 채점, 최대 2회) (실행 계약 §6.3, §7)
 
-- [ ] 컨테이너 이미지: JDK, Node, pnpm, Playwright Chromium, 고정 글꼴, Claude Code 고정 버전, `TZ=Asia/Seoul`, `LANG=ko_KR.UTF-8`, non-root 사용자
+- [x] 컨테이너 이미지: JDK, Node, pnpm, Playwright Chromium, 고정 글꼴, Claude Code 고정 버전, `TZ=Asia/Seoul`, `LANG=ko_KR.UTF-8`, non-root 사용자
   - 완료 조건: 이미지 digest 를 `lab/harness/image.lock` 에 기록
+  - 결과(2026-10-03): `lab/harness/image/Dockerfile`, id `sha256:ea03f941…`. 이미지 안 Storybook smoke 에서 `Default` 통과, `Must Fail` 실패(exit 1)
   - 완료 조건: 설계 §3.5 의 Storybook smoke(story 1개 통과, 음성 대조 실패)를 이미지 안에서 다시 실행해 같은 결과가 나온다. 확인용 프로젝트는 삭제한다
 - [ ] egress 제한: Anthropic API 도메인만 허용
   - 완료 조건: 컨테이너 안에서 `curl https://registry.npmjs.org` 가 실패하고 Claude Code 호출은 성공
+  - 결과(2026-10-03): `image/start.sh` 적용. npm · GitHub · host 차단, `api.anthropic.com` HTTP 405, Agent 권한(uid 1000, CapEff 0)으로 규칙 변경 거부. Claude Code 호출 성공은 pilot 에서 확인
 - [ ] `export.sh <variant>`: 설계 §15.1
   - 완료 조건: 내보낸 저장소에서 `agentic`, `variant`, `실험`, `experiment` 검색 결과 0건, commit 1개, `CLAUDE.md` · `AGENTS.md` · `.claude/` 없음
 - [ ] `run.sh <task> <variant> <run-id>`: clone, 의존성 offline 설치, Claude Code 실행, 결과 수집
