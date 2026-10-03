@@ -1,7 +1,7 @@
 # A/B 실험 코드베이스 설계 v0.1
 
 작성일: 2026-10-03
-상태: **FROZEN** (2026-10-03, 변경 2 재확정). 판정 근거는 §20. 실험 애플리케이션 코드는 아직 없다.
+상태: **REVIEWED** (2026-10-03). 인증 방식 변경(변경 3)으로 FROZEN 을 해제했다. 경과는 §20.6. 실험 애플리케이션 코드는 아직 없다.
 실행 조건 · 예산 · 기록 · 실행 상태: `_design/experiment-execution-contract-v0.1.md` (이하 "실행 계약")
 기준 커밋: `main` `2f43bcf` (PR #1 병합 시점)
 입력 문서: `_research/06` ~ `_research/17`, `_research/sources.md`, `_research/02`, `_research/04`, `_research/05`
@@ -1061,7 +1061,7 @@ Gradle 읽기 전용 cache 와 pnpm store 는 두 Variant 의 build 파일과 lo
 
 - 실제 secret 을 쓰지 않는다. seed 의 로그인 계정은 시험용이며 README 에 적는다
 - 컨테이너 외부 통신은 Anthropic API 도메인만 허용한다. Claude Code 공식 dev container 의 `init-firewall.sh` 방식을 따른다(https://code.claude.com/docs/en/devcontainer)
-- API 인증 값은 환경 변수로만 넣고 저장소 · 이미지에 넣지 않는다. 실험 전용 Console workspace 의 API key 와 workspace spend limit 을 쓴다(실행 계약 §4.4)
+- 인증 값은 환경 변수로만 넣고 저장소 · 이미지에 넣지 않는다. 사용자의 Claude Max 구독 장기 인증 token(`CLAUDE_CODE_OAUTH_TOKEN`)을 쓴다(실행 계약 §4.4)
 - `WebSearch` · `WebFetch` 도구를 두 Variant 모두 끈다. 이 저장소가 공개돼 있고 `WebSearch` 는 컨테이너 egress 제한을 거치지 않는다(실행 계약 §3)
 - 컨테이너는 non-root 사용자로 실행하고 `--dangerously-skip-permissions` 는 이 조건에서만 쓴다. 공식 문서는 이 플래그를 non-root 컨테이너와 egress 제한을 함께 쓸 때 권한다
 - 운영 환경 접근 경로가 없다. host 디렉터리는 실행 계약 §4.3 의 경로만 연결한다. `run.json` 같은 실행 기록은 연결하지 않는다
@@ -1217,9 +1217,9 @@ B 를 완성된 A 에서 파생하는 목적은 세 가지다.
 | 항목 | 상태 | 영향 |
 |---|---|---|
 | Claude 모델과 effort | 결정(2026-10-03). `claude-opus-5-5`(subagent 포함), effort `medium`(Claude Code 의 Opus 5.5 기본값을 명시 고정). 학습 기준일 2026-06 은 §3.4 의 모든 major 최초 stable 출시일보다 늦다. 실행 계약 §2 | 비용, 결과 해석 범위. 정할 때 모델 학습 기준일과 §3.4 의 major 출시일 관계를 기록한다 |
-| 실행당 · 전체 예산 | 결정(2026-10-03). 실행당 USD 15 · 45분, 전체 USD 2,000. 실행 계약 §5 | `--max-budget-usd`, 반복 횟수 |
+| 실행당 · 전체 예산 | 결정(2026-10-03). 실행당 45분과 계산 비용 상한 USD 15, 전체는 Claude Max 구독 사용 한도 안에서 최대 122 세션. 실행 계약 §5 | `--max-budget-usd`, 반복 횟수 |
 | 실행 기계(이 Mac 의 Docker 또는 Linux 노드) | 결정(2026-10-03). 이 Mac 의 Docker Desktop, `linux/arm64`, 동시 실행 실험 2 만 2개. 실행 계약 §4 | 이미지 CPU 아키텍처, 시각 기준 화면, 동시 실행 수 |
-| API 인증 방식 | 결정(2026-10-03). 실험 전용 Console workspace API key, 환경 변수 전달, workspace spend limit. 실행 계약 §4.4 | 실험 전용 key, 예산 한도, 컨테이너에 넣는 방법(§15.3) |
+| API 인증 방식 | 결정(2026-10-03, 같은 날 변경). 사용자의 Claude Max 구독 장기 인증 token, 환경 변수 전달. 실행 계약 §4.4 | 실험 전용 key, 예산 한도, 컨테이너에 넣는 방법(§15.3) |
 | 원본 로그 보관 위치(git, release 첨부, 별도 저장소) | 결정(2026-10-03). 실행 기계의 결과 root, 실험 종료 후 private GitHub 저장소 release asset. Git commit 하지 않음. 실행 계약 §8.4 | 결과 공개(`_research/15` §12) |
 | timeout · retry · 병렬 · 실행 환경 고정 | 결정(2026-10-03). 실행 계약 §3, §4, §6.5, §7 | 실행 사이 조건 동일성 |
 
@@ -1347,3 +1347,7 @@ FROZEN → REVIEWED. §19.2 의 결정 항목을 `_design/experiment-execution-c
 실행 계약 1차 독립 검토: blocker 0, major 4, minor 14, FROZEN 비동의. 지적과 수정은 실행 계약 §12 에 적었다. 설계 쪽 반영은 위 표의 §8.2 숨김 채점 · §14.5 행과 §19.2 의 effort 변경(`high` → `medium`)이다.
 실행 계약 2차 · 3차 확인: 2차 blocker 0, major 2, minor 9 → 반영. 3차 blocker 0, major 0, minor 4 → 반영하고 검토자가 FROZEN 에 동의했다. 지적과 수정은 실행 계약 §12.
 판정: blocker 0, major 0. 설계와 실행 계약을 FROZEN 으로 되돌린다. 체크리스트 3단계를 시작할 수 있다.
+
+## 20.6 변경 3: 인증 방식(2026-10-03)
+
+FROZEN → REVIEWED. 사용자 결정으로 Agent 인증을 실험 전용 API key 에서 사용자의 Claude Max 구독으로 바꿨다. §15.3 과 §19.2 의 인증 · 예산 행을 고쳤고, 규칙은 실행 계약 §4.4 · §5.2 에 있다. 실행 기계 변경 검토와 함께 재검토한다.

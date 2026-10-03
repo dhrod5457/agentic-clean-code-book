@@ -41,7 +41,8 @@ export function agentEnv(config: ExecConfig, configDir: string, host: NodeJS.Pro
     CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '1',
     CLAUDE_CONFIG_DIR: configDir,
   };
-  for (const name of ['PATH', 'HOME', 'ANTHROPIC_API_KEY']) {
+  // 구독 인증 token 만 넘긴다. ANTHROPIC_API_KEY 를 넘기면 API 과금 인증으로 바뀔 수 있다(실행 계약 §4.4)
+  for (const name of ['PATH', 'HOME', 'CLAUDE_CODE_OAUTH_TOKEN']) {
     const v = host[name];
     if (v !== undefined) env[name] = v;
   }

@@ -75,6 +75,8 @@ test('작업 디렉터리는 source commit 이고 origin 이 없으며, 채점�
 test('Variant a 와 b 의 Agent 실행 인자 · 환경 변수는 세션 ID 와 설정 디렉터리 경로 외에 같다', async () => {
   process.env.ANTHROPIC_MODEL = 'claude-haiku-4-5';
   process.env.CLAUDE_CODE_EFFORT_LEVEL = 'max';
+  process.env.ANTHROPIC_API_KEY = 'sk-ant-test';
+  process.env.CLAUDE_CODE_OAUTH_TOKEN = 'oauth-test';
   try {
     const seen: { argv: string[]; env: Record<string, string> }[] = [];
     for (const variant of ['a', 'b']) {
@@ -92,6 +94,9 @@ test('Variant a 와 b 의 Agent 실행 인자 · 환경 변수는 세션 ID 와 
     for (const { env } of seen) {
       assert.equal(env.ANTHROPIC_MODEL, undefined);
       assert.equal(env.CLAUDE_CODE_EFFORT_LEVEL, undefined);
+      // 구독 token 만 넘기고 API key 는 넘기지 않는다
+      assert.equal(env.ANTHROPIC_API_KEY, undefined);
+      assert.equal(env.CLAUDE_CODE_OAUTH_TOKEN, 'oauth-test');
       assert.equal(env.CLAUDE_CODE_SUBAGENT_MODEL, 'claude-opus-5-5');
       assert.equal(env.CLAUDE_CODE_SUBAGENT_MODEL_FORCE, '1');
     }
@@ -100,6 +105,8 @@ test('Variant a 와 b 의 Agent 실행 인자 · 환경 변수는 세션 ID 와 
   } finally {
     delete process.env.ANTHROPIC_MODEL;
     delete process.env.CLAUDE_CODE_EFFORT_LEVEL;
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
   }
 });
 
