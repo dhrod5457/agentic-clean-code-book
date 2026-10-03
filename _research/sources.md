@@ -743,3 +743,89 @@
   - modular monolith의 단순성, 유지보수성 장점과 scalability/resilience 한계를 함께 정리
 - 책에서의 의미:
   - Agentic Clean Code를 특정 architecture style로 고정하지 않기 위한 자료
+
+
+## N. 유지보수와 장기 작업을 평가하는 최근 벤치마크
+
+### N1. NITR — Needle in the Repo
+
+- URL: https://cs.ucr.edu/~qzhang/nitr.html
+- Date: 2026
+- 핵심:
+  - 최종 기능 성공 여부만 보지 않고 AI가 repository 변경을 유지보수하기 좋은 형태로 했는지 평가
+  - change locality
+  - reuse와 repository awareness
+  - responsibility decomposition
+  - dependency control
+  - testability / determinism
+  - side-effect isolation
+  - state ownership
+- 책에서의 쉬운 표현:
+  - "기능이 돌아간다고 잘 고친 것은 아니다"
+- 책에서의 용도:
+  - Agentic Clean Code의 비교 실험 설계에 직접적인 참고
+
+### N2. ChainSWE
+
+- URL: https://arxiv.org/abs/2607.02606
+- Date: 2026
+- Scope: 54 Python projects, 304 chronological issues
+- 핵심:
+  - repository를 매번 초기화하지 않고 이전 수정 결과 위에서 다음 bug를 계속 해결
+  - chain이 길어질수록 Agent 성능이 최대 70%까지 감소
+- 책에서의 쉬운 표현:
+  - "첫 번째 수정은 잘해도 계속 고치다 보면 점점 어려워질 수 있다"
+- 책에서의 용도:
+  - 다음 Agent가 더 쉽게 일할 수 있는가
+  - 장기 유지보수성
+
+### N3. SWE-CI
+
+- URL: https://arxiv.org/abs/2603.03823
+- Date: 2026
+- Scope: 100 tasks, 평균 233일 / 71 consecutive commits의 evolution history
+- 핵심:
+  - 일회성 bug fix가 아니라 장기간 이어지는 CI 형태로 Agent 유지보수 능력을 평가
+  - functional correctness에서 long-term maintainability로 평가 범위를 확장
+- 책에서의 쉬운 표현:
+  - "소프트웨어는 한 번 고치고 끝나는 작업이 아니다"
+- 책에서의 용도:
+  - 연속 변경 실험 근거
+
+### N4. NL2Repo-Bench
+
+- URL: https://proceedings.mlr.press/v306/ding26j.html
+- Venue: ICML 2026
+- 핵심:
+  - 짧은 patch task가 아니라 long-horizon repository construction 능력을 평가
+- 책에서의 쉬운 표현:
+  - "짧은 문제 하나를 푸는 능력과 저장소를 오래 만들어가는 능력은 다르다"
+- 책에서의 용도:
+  - long-horizon engineering 관점
+
+### N5. RACE-Bench
+
+- URL: https://conf.researchr.org/details/ase-2026/ase-2026-research-track/130/RACE-Bench-A-Reasoning-Augmented-Benchmark-for-Repository-Level-Code-Agents-on-Featu
+- Venue: ASE 2026
+- Scope: 528 feature-addition instances, 12 open-source repositories
+- 핵심:
+  - final test 결과만 보는 black-box 평가의 한계를 지적
+  - feature addition 과정에서 Agent가 어디서 실패하는지 reasoning 과정까지 평가하려는 방향
+- 책에서의 쉬운 표현:
+  - "성공했는지만 보지 말고 어떻게 고쳤는지도 봐야 한다"
+- 책에서의 용도:
+  - 비교 실험에서 탐색량/수정과정 기록의 근거
+
+### N6. SWE-fficiency
+
+- URL: https://proceedings.mlr.press/v306/ma26l.html
+- Venue: ICML 2026
+- Scope: 498 performance tasks, 9 real repositories
+- 핵심:
+  - Agent가 성능 병목을 찾고 실제 workload를 개선하는 능력 평가
+  - 상위 Agent도 전문가 speedup의 평균 0.23배 미만
+  - 병목 위치 찾기, 여러 함수에 걸친 실행 흐름 이해, correctness 유지가 어려움
+- 책에서의 쉬운 표현:
+  - "고칠 곳을 찾는 문제는 버그 수정뿐 아니라 성능 개선에서도 반복된다"
+- 책에서의 용도:
+  - 코드 위치 찾기와 전체 실행 흐름 이해의 중요성
