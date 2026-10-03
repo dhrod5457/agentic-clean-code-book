@@ -515,3 +515,121 @@
 8. Agent task specification quality 및 requirement smell
 9. long-running agent continuity / handoff artifact
 10. 실제 프로젝트를 대상으로 한 Task Surface 실험 설계
+
+
+## K. Coding Agent Failure Modes
+
+### K1. FixedBench — Coding Agents Don't Know When to Act
+
+- URL: https://www.sri.inf.ethz.ch/publications/gloaguen2026coding
+- Date: 2026
+- 핵심:
+  - 코드 변경이 필요 없는 200개 human-verified task
+  - 최신 Agent도 35~65%에서 불필요한 production code 변경 제안
+  - "아무것도 하지 않기"를 명시적인 성공으로 취급해야 성능 개선
+- 책에서의 쉬운 표현:
+  - "고칠 필요가 없는데도 손댄다"
+- 책에서의 용도:
+  - No Change를 정상적인 완료 상태로 설계해야 한다는 근거
+
+### K2. OverEager Coding Agents / OverEager-Bench
+
+- URL: https://arxiv.org/abs/2605.18583
+- Date: 2026
+- Scope: 500 scenarios, 약 7,500 runs
+- 핵심:
+  - benign task에서도 요청 범위를 넘어 관련 없는 파일/설정을 건드리는 현상
+  - model뿐 아니라 Agent 실행 framework에 따라 차이가 큼
+- 책에서의 쉬운 표현:
+  - "시키지 않은 것까지 건드린다"
+- 책에서의 용도:
+  - task boundary / protected path / scope guard
+
+### K3. SWE Atlas
+
+- URL:
+  - https://labs.scale.com/papers/sweatlas
+  - https://github.com/scaleapi/SWE-Atlas
+- Date: 2026
+- Scope:
+  - Codebase Q&A 124 tasks
+  - Test Writing 90 tasks
+  - Refactoring 70 tasks
+- 핵심:
+  - 코드를 만드는 능력과 코드베이스를 이해·검증·정리하는 능력은 다름
+  - 상위 시스템도 전체 평가에서 50%를 넘지 못함
+  - edge case, runtime analysis, engineering best practice에서 계속 어려움
+- 책에서의 쉬운 표현:
+  - "패치를 만드는 것과 소프트웨어를 제대로 고치는 것은 다르다"
+
+### K4. Agentic Rubrics
+
+- URL:
+  - https://labs.scale.com/blog/agentic-rubrics
+  - https://static.scale.com/uploads/654197dc94d34f66c0f5184e/Scale-Agentic-Rubrics.pdf
+- Date: 2026
+- 핵심:
+  - tests가 accept한 patch 중에도 실제로는 root cause 누락, edge case 누락, wrong layer, scope creep이 존재
+  - test와 rubric이 충돌한 사례 중 54%는 rubric이 잡아낸 문제가 실질적인 문제였음
+- 책에서의 쉬운 표현:
+  - "테스트는 통과했지만 제대로 고친 것은 아니다"
+
+### K5. SWE Refactor Bench
+
+- URL: https://arxiv.org/abs/2608.23564
+- Date: 2026
+- 핵심:
+  - 동작 테스트만 통과하면 실제 migration을 하지 않고 옛 구현을 복사해도 통과할 수 있는 blind spot
+  - migration completeness와 behavior correctness를 따로 검사
+- 책에서의 쉬운 표현:
+  - "정답만 맞추고 숙제는 안 한 패치"
+- 책에서의 용도:
+  - structural verification / completion check
+
+### K6. CodeTaste
+
+- URL: https://proceedings.mlr.press/v306/thillen26a.html
+- Date: 2026
+- 핵심:
+  - Agent는 상세히 지정된 refactoring은 비교적 잘 수행하지만, 실제 사람이 선택했을 구조 개선을 스스로 발견하는 데는 약함
+- 책에서의 쉬운 표현:
+  - "어떻게 고치라고 정확히 알려주면 잘하지만, 어디를 정리해야 하는지는 아직 어렵다"
+- 책에서의 용도:
+  - structural judgement / refactoring discovery
+
+### K7. Debt Behind the AI Boom
+
+- URL: https://arxiv.org/abs/2603.28592
+- Date: 2026
+- Scope: 304,362 verified AI-authored commits, 6,275 repositories
+- 핵심:
+  - AI-authored changes에서도 code smell/bug/security issue가 실제로 발생
+  - 추적된 AI-introduced issue 중 24.2%가 최신 revision까지 남음
+- 책에서의 쉬운 표현:
+  - "AI가 만든 작은 문제도 저장소에 남아 쌓인다"
+- 책에서의 용도:
+  - 지속적인 cleanup과 구조 검사 필요성
+
+### K8. Code for Machines, Not Just Humans
+
+- URL: https://doi.org/10.1145/3793655.3793722
+- Date: 2026
+- Scope: 5,000 Python files
+- 핵심:
+  - 사람에게 읽기 좋은 코드 품질과 AI가 의미를 보존하며 수정할 가능성 사이에 유의미한 연관 관찰
+- 책에서의 쉬운 표현:
+  - "사람에게 좋은 코드와 Agent에게 좋은 코드는 완전히 다른 것이 아니다"
+- 책에서의 용도:
+  - 기존 Clean Code를 버리는 것이 아니라 확장해야 한다는 반론 근거
+
+### K9. Do AI Agents Really Improve Code Readability?
+
+- URL: https://arxiv.org/abs/2603.13723
+- Date: 2026
+- Scope: 403 readability-related Agent commits
+- 핵심:
+  - readability 개선 목적의 Agent 변경도 기존 maintainability/complexity 지표를 악화시키는 사례가 적지 않음
+- 책에서의 쉬운 표현:
+  - "정리해 달라고 했다고 실제 코드가 더 단순해지는 것은 아니다"
+- 책에서의 용도:
+  - refactoring verification 필요성
