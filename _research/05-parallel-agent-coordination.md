@@ -276,3 +276,29 @@ worktree/container isolation은 다음 문제를 해결한다.
   - https://dora.dev/capabilities/loosely-coupled-teams/
 - Anthropic, *Building a C compiler with a team of parallel Claudes*
   - https://www.anthropic.com/engineering/building-c-compiler
+
+
+---
+
+## 11. Worktree를 줄이는 것이 목표가 될 수 있는가
+
+추가 리서치 결과, Worktree 자체를 줄이는 것을 직접 목표로 삼기보다 **Worktree 없이도 안전한 Task 비율**을 높이는 방향이 더 정확하다.
+
+Git Worktree는 각 작업의 파일뿐 아니라 `HEAD`, `index` 같은 Git 상태도 분리한다. 따라서 같은 checkout을 여러 Agent가 공유하면서 각자 `git add/commit/reset/rebase`까지 수행하는 것은 코드 경계가 좋아도 안전하지 않다.
+
+반면 다음 조건이 갖춰지면 일부 Task는 shared workspace 후보가 될 수 있다.
+
+- write scope가 서로 겹치지 않음
+- cross-module contract 변경 없음
+- generated output이 task-local
+- port/DB/cache 같은 runtime resource가 격리됨
+- build/test가 source tree를 오염시키지 않음
+- Git write operation은 coordinator가 직렬화
+
+Anthropic의 16-Agent C compiler 실험에서도 Agent마다 container와 clone을 줬지만 하나의 큰 문제에 모든 Agent가 몰리자 병렬성은 나오지 않았다. 문제를 파일/실패 단위로 분해한 뒤에야 병렬성이 살아났다.
+
+따라서 이 문서의 기존 결론을 다음처럼 확장한다.
+
+> **Worktree는 execution isolation을 제공한다. Agentic architecture는 coordination이 필요 없는 change surface를 늘린다. 둘은 대체 관계가 아니다.**
+
+상세 연구와 Hybrid Isolation 실험 설계는 `18-worktree-minimization.md` 참조.
