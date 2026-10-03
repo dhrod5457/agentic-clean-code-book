@@ -1,7 +1,8 @@
 # A/B 실험 코드베이스 설계 v0.1
 
 작성일: 2026-10-03
-상태: **FROZEN** (2026-10-03). 판정 근거는 §20. 실험 애플리케이션 코드는 아직 없다.
+상태: **FROZEN** (2026-10-03, 변경 4 재확정). 판정 근거는 §20. 실험 애플리케이션 코드는 아직 없다.
+실행 조건 · 예산 · 기록 · 실행 상태: `_design/experiment-execution-contract-v0.1.md` (이하 "실행 계약")
 기준 커밋: `main` `2f43bcf` (PR #1 병합 시점)
 입력 문서: `_research/06` ~ `_research/17`, `_research/sources.md`, `_research/02`, `_research/04`, `_research/05`
 
@@ -747,11 +748,11 @@ export const adminPages = sortByGroupAndLabel(Object.values(modules).map((m) => 
 
 ### 병합과 측정
 
-1. 같은 기준 commit 에서 8개 실행을 동시에 시작한다. 실행마다 별도 컨테이너와 별도 clone 을 쓴다(§15)
+1. 같은 기준 commit 에서 8개 실행을 한다. 동시 실행 수는 실행 계약 §4.2 (2개)를 따른다. 실행마다 별도 컨테이너와 별도 clone 을 써서 서로의 작업을 볼 수 없으므로, 동시 실행 수는 3번의 쌍별 충돌 결과에 영향을 주지 않는다(§15)
 2. 실행이 끝나면 harness 가 각 결과를 branch `task/<ID>` 로 commit 한다
 3. **쌍별 충돌**: 28개 쌍마다 기준 commit 에서 두 branch 를 3-way merge 해 충돌 파일과 hunk 수를 기록한다. 병합 순서에 영향을 받지 않는 지표다(`_research/sources.md` L1 과 같은 방식)
 4. **순차 통합**: ID 사전순으로 통합 branch 에 병합한다. 충돌이 나면 통합 Agent(같은 모델, 고정 문구 "충돌을 해결하고 시험을 통과시켜라")가 해결한다. 병합마다 `./gradlew test`, `pnpm test`, `pnpm e2e` 를 실행한다
-5. 마지막에 숨김 채점 8개를 전부 실행한다
+5. 마지막에 숨김 채점 8개를 전부 실행한다. 이 결과가 실험 2 의 숨김 채점 결과다. 실행마다 하는 채점(1번의 각 실행)은 개별 과제 판정으로 따로 기록한다(실행 계약 §6.4)
 
 숨김 채점: 각 API 가 seed 에 대해 기대 행을 반환하는지, ADMIN · OPERATOR 로 로그인했을 때 메뉴에 이름이 보이고 화면이 열리는지, 로그인하지 않은 요청이 401 을 받는지.
 OPERATOR 가 READ 권한을 모두 가지므로 8개 조회 화면에 접근하지 못하는 역할은 없다. 메뉴 정의의 권한 값이 틀려도 채점으로 드러나지 않는다(§17).
@@ -787,10 +788,20 @@ jsdom 시험은 layout 을 계산하지 않으므로 두 Variant 모두 이 버�
 
 ### 숨김 채점
 
-- API 로 부서명 80자, 120자 계정을 만든 뒤 1280×800, 1024×768 에서 `/staff` 를 연다
-- 가로 스크롤 없이, 모든 행의 액션 버튼 bounding box 가 표 컨테이너와 viewport 안에 보인다. 액션 열을 고정(sticky)하는 수정도 이 조건을 만족한다
+- API 로 부서명 80자, 120자 계정을 만든 뒤 1280×800 에서 `/staff` 를 연다. 1280×800 은 두 Variant 의 E2E viewport 다(`conventions.md` 의 지시로 Variant 에 들어가 Agent 가 볼 수 있다). `ui.md` 의 기준 화면 폭도 1280px 이다
+- 가로 스크롤 없이, 모든 행의 액션 버튼이 보이고 bounding box 의 가로 범위가 표 컨테이너와 viewport 안에 있다. 액션 열을 고정(sticky)하는 수정도 이 조건을 만족한다
 - 다른 목록 화면 4개의 seed 기준 screenshot 이 기준 화면과 같다
-- 기준 commit 의 seed 데이터로 위 조건이 두 Variant 에서 이미 성립하는지 체크리스트 6단계에서 확인한다. 성립하지 않으면 채점이 버그와 무관한 이유로 실패한다
+- 기준 commit 의 seed 데이터로 위 조건이 두 Variant 에서 이미 성립하는지 체크리스트 7단계에서 확인한다. 성립하지 않으면 채점이 버그와 무관한 이유로 실패한다
+
+판정 화면 폭과 진단 화면 폭:
+
+| 화면 폭 | 구분 | 판정 · 점수 | 실행 위치 |
+|---|---|---|---|
+| 1280×800 | 판정(normative) | 위 조건의 통과 여부가 실험 3 의 숨김 채점 결과다 | 묶음 `exp3`(`lab/grading/tasks/exp3/`) |
+| 1024×768 | 진단(diagnostic) | 쓰지 않는다. 실패해도 숨김 채점 결과, 실험 3 성공 여부, 지표에 영향이 없다 | 묶음 `diag-exp3-1024`(`lab/grading/diagnostics/`) |
+
+1024×768 은 과제 문구, `ui.md`, Variant 의 E2E 설정에 없는 화면 폭이다. 판정에 넣으면 Agent 에게 공개하지 않은 요구사항을 숨김 채점이 검사하게 된다. 그래서 같은 조건을 실행해 결과, screenshot, 측정값만 기록한다.
+진단 묶음은 판정 묶음과 별도로 순서대로 실행해 종료 코드 · JUnit 파일 · 애플리케이션 프로세스 · 계정 loginId 를 공유하지 않는다. `run.sh` 는 진단 묶음을 다른 묶음과 함께 받으면 거부한다. harness 는 진단 묶음의 결과(실패 · 오류 · 시간 초과 포함)를 실행 상태와 재실행 판단에 쓰지 않는다.
 
 부서명 전체 문자열을 화면에서 확인할 수 있는지(텍스트나 `title` 속성)는 과제 문구에 없으므로 채점하지 않고 사람 검토에서 기록한다.
 
@@ -950,14 +961,14 @@ Agent 의 자연어 보고는 측정에 쓰지 않는다. 도구 호출 기록, 
 |---|---|---|---|
 | 이벤트 stream | `claude -p --output-format stream-json --verbose --include-hook-events` | 도구 호출(`tool_use` 이름 · 입력), 도구 결과, 마지막 `result` 의 소요 시간 · turn 수 · 비용 · token | `claude --help` |
 | 세션 기록 | `$CLAUDE_CONFIG_DIR/projects/<경로>/<session-id>.jsonl` | 항목별 `timestamp`, `tool_use` 입력, `toolUseResult`(Bash 는 `stdout`, `stderr`, `interrupted`), 실패한 Bash 결과의 `Exit code N` | 로컬 세션 기록 확인 |
-| hook 기록 | `PreToolUse`, `PostToolUse` hook 이 입력 JSON 을 파일에 추가 | `tool_use_id`, `tool_name`, `tool_input`, `tool_response`(Bash 의 `exit_code` 포함). 입력에 timestamp 필드는 없으므로 hook 이 기록 시각을 붙인다 | https://code.claude.com/docs/en/hooks |
+| hook 기록 | `PreToolUse`, `PostToolUse`, `PostToolUseFailure` hook 이 입력 JSON 을 파일에 추가. 실패한 도구 호출(exit ≠ 0 인 Bash 포함)에는 `PostToolUse` 대신 `PostToolUseFailure` 가 실행된다(설치된 CLI 2.1.287 코드로 확인, 실제 실행 확인은 pilot) | `tool_use_id`, `tool_name`, `tool_input`, `tool_response`(Bash 의 `exit_code` 포함), 실패 시 오류. 입력에 timestamp 필드는 없으므로 hook 이 기록 시각을 붙인다 | https://code.claude.com/docs/en/hooks |
 | 세션 ID 고정 | `--session-id <uuid>` | 실행 ID 와 세션 기록 연결 | `claude --help` |
 
 hook 은 기록만 하고 출력과 결정을 내지 않는다. hook 설정은 harness 가 `--settings` 로 넘기며 실행용 저장소에 없다.
 
 ## 14.3 시험 산출물 수집
 
-- `PostToolUse` hook 이 Bash 명령을 시험 명령 패턴(`gradlew .*test`, `vitest`, `pnpm (test|e2e|test:stories)`, `playwright test`)으로 판정하면 `backend/build/test-results/`, `frontend/test-results/`, `frontend/reports/junit*.xml` 중 그 명령의 `PreToolUse` 기록 시각 이후 수정된 파일만 `artifacts/test-<순번>/` 으로 복사한다. Gradle 은 이번에 실행하지 않은 시험 클래스의 이전 XML 을 지우지 않으므로, 시각으로 거르지 않으면 이전 결과를 이번 결과로 잘못 센다
+- `PostToolUse` · `PostToolUseFailure` hook 이 Bash 명령이 끝날 때마다 `backend/build/test-results/`, `frontend/test-results/`, `frontend/reports/junit*.xml` 중 그 명령의 `PreToolUse` 때 남긴 파일 목록(수정 시각 · 크기)과 비교해 새로 생기거나 바뀐 파일만 `artifacts/test-<순번>/` 으로 복사한다. 시계 비교(수정 시각이 시작 시각 이후)는 파일 시스템 시각 정밀도에 따라 새 파일을 놓쳐 쓰지 않는다. 새 파일이 없으면 복사하지 않는다. 명령 이름으로 시험 명령을 고르지 않는다. `./gradlew build` · `check` 처럼 시험을 함께 실행하는 명령과 `pnpm --filter` 같은 형식을 이름 패턴으로 모두 잡을 수 없기 때문이다. 시험이 실패한 명령도 복사한다. 경로는 Agent 의 현재 디렉터리가 아니라 작업 디렉터리 루트(`/work/shop-admin`) 기준이다. hook 입력의 `cwd` 는 Agent 가 `cd backend` 하면 바뀌기 때문이다. Gradle 은 이번에 실행하지 않은 시험 클래스의 이전 XML 을 지우지 않으므로, 시각으로 거르지 않으면 이전 결과를 이번 결과로 잘못 센다
 - Vitest · Playwright 의 JUnit reporter 는 두 Variant 설정에 같게 넣는다
 - 실행 종료 후 harness 가 5단계 전체 검증을 따로 실행하고 시간을 잰다. Agent 의 실행 시간과 섞지 않는다
 
@@ -974,6 +985,7 @@ hook 은 기록만 하고 출력과 결정을 내지 않는다. hook 설정은 h
 | 첫 신뢰 가능한 시험 시간 | 실행 시작부터, 첫 운영 코드 수정 이후 실행된 시험 명령 중 JUnit XML 에 시험 1개 이상이 기록된 첫 명령이 끝난 시점까지. compile 오류로 시험이 실행되지 않은 명령은 제외 |
 | 전체 시험 시간 | harness 가 실행 후 따로 잰 5단계 검증 시간 |
 | 재시도 횟수 | 첫 실패 시험 명령 이후 첫 성공까지 실행한 시험 명령 수. 수정 없이 같은 명령을 다시 실행한 횟수는 따로 센다 |
+| 시험 명령(위 두 지표의 정의) | Agent 의 Bash 명령 중 (1) hook 기록에 시험 결과 복사본(`copied_test_results`)이 있는 명령, 또는 (2) 명령이 `lab/spec/conventions.md` §8 의 시험 실행 명령(`./gradlew test` · `build` · `check`, `pnpm test` · `e2e` · `test:stories` 와 그 `run` · `-C` · `--dir` · `--filter` 형식, `vitest`, `playwright test`, `verify-all.sh`)에 맞는 명령. (2) 는 compile 오류로 결과 파일이 생기지 않은 시험 실행을 센다. 실패 · 성공은 Bash 종료 코드로 정한다. 배경으로 실행한 시험의 결과 파일은 뒤에 끝난 다른 명령에 붙어 복사될 수 있으므로, 시각은 결과 파일의 수정 시각을 함께 본다. 이름 목록과 계산은 체크리스트 7단계 지표 계산 스크립트가 맡는다 |
 | merge conflict | 실험 2 의 28쌍 3-way merge 결과. 충돌 쌍 수, 충돌 파일, hunk 수 |
 | merge 후 시험 실패 | 실험 2 순차 통합에서 병합마다 실행한 검증의 실패 수와 실패 시험 ID |
 | 요청 범위를 넘은 변경 | 자동 표시(과제 영역 밖 파일, build · lock 파일, 삭제 파일, seed 변경)와 사람 검토 판정을 따로 기록한다. 자동 표시는 판정이 아니다 |
@@ -983,12 +995,13 @@ hook 은 기록만 하고 출력과 결정을 내지 않는다. hook 설정은 h
 
 ## 14.5 실행 기록 형식
 
-실행마다 `results/<run-id>/` 에 다음을 둔다.
+디렉터리 구성, 설정(`run.json`)과 관찰(`result.json`)의 분리, 원본(`raw/`)과 정규화 결과의 분리는 실행 계약 §8 이 기준이다. 아래 목록은 각 기록의 내용이다. 숨김 채점 결과는 `grading.json` 대신 `result.json` 의 `grading` 에 들어가고, 진단 묶음 결과는 판정 결과와 분리된 `grading.diagnostic` 에 들어간다.
+
 
 ```
-run.json          실행 ID, 날짜, 과제, Variant 코드(가림), 기준 commit, Claude Code 버전, 모델, effort,
+run.json          실행 ID, 날짜, 과제, Variant(a · b. 지표 계산은 읽지 않는다, 실행 계약 §8.1), 기준 commit, Claude Code 버전, 모델, effort,
                   도구 목록, 시간 제한, 예산 제한, 컨테이너 이미지 digest
-stream.jsonl      stream-json 원본. 각 줄에 수신 시각을 붙인다
+stream.jsonl      stream-json 원본. 수신 시각은 원본 줄을 바꾸지 않고 별도 파일에 둔다(실행 계약 §8.4)
 transcript.jsonl  세션 기록 원본
 hooks.jsonl       hook 기록
 artifacts/        시험 산출물 순번별 복사본
@@ -1003,8 +1016,8 @@ review.json       사람 검토 결과
 
 - 첫 실행은 harness 확인용 pilot 이다. 결과에 넣지 않는다
 - 실험 1, 3: Variant 당 5회. A/B 실행 순서는 무작위로 섞는다. 시간 지표 때문에 동시에 실행하지 않는다
-- 실험 2: Variant 당 3회(1회 = 8개 동시 실행). 결과 변동이 크면 반복을 늘린다
-- 실행당 시간 제한 45분, 예산 제한은 §19.2 [결정 필요]
+- 실험 2: Variant 당 3회(1회 = 8개 실행, 동시 2개). 결과 변동이 크면 반복을 늘린다
+- 실행당 시간 제한 45분, 계산 비용 상한 USD 15(`--max-budget-usd`). 전체 사용량과 재실행 정책은 실행 계약 §5, §7
 - 세션 수 합계: 실험 1 10회, 실험 3 10회, 실험 2 48회와 통합 Agent 실행
 
 ## 14.7 사람 검토
@@ -1023,8 +1036,8 @@ review.json       사람 검토 결과
 - `lab/variants/<variant>/` 만 담은 새 git 저장소. 저장소 이름은 두 Variant 모두 `shop-admin`
 - commit 1개, 메시지 `Initial commit`. 작성 이력에 실험 의도가 드러날 수 있어 이력을 넘기지 않는다
 - `_research`, `_design`, `lab/spec`, `lab/grading`, `lab/tasks`, 다른 Variant 는 넣지 않는다
-- `CLAUDE.md`, `AGENTS.md`, `.claude/` 는 두 Variant 모두 두지 않는다. README 만 둔다
-- 내보낸 저장소에서 `agentic`, `variant`, `실험`, `experiment` 문자열을 검색해 0건이어야 한다
+- `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `.claude/` 는 두 Variant 모두 하위 디렉터리를 포함해 두지 않는다. 이름은 대소문자 없이 비교한다(macOS bind mount 에서 `claude.md` 가 `CLAUDE.md` 로 열린다). README 만 둔다
+- 내보낸 저장소에서 `agentic`, `variant`, `실험`, `experiment` 문자열을 파일 내용(binary 포함)과 경로 이름에서 검색해 0건이어야 한다
 
 ## 15.2 실행 단위
 
@@ -1037,11 +1050,11 @@ review.json       사람 검토 결과
 | temp directory | `/tmp` 공유 | 컨테이너마다 별도 `/tmp` |
 | test DB · 파일 | H2 파일 공유 | H2 in-memory, Spring 의 고유 DB 이름 생성(`spring.datasource.generate-unique-name` 기본값) 사용. 파일 DB 금지 |
 | frontend dev server | 다른 실행의 서버에 붙음 | Playwright `reuseExistingServer: false`, 컨테이너 분리 |
-| Gradle cache | `~/.gradle` lock 경쟁, cache 상태 차이로 시간 측정 오염 | 실행마다 빈 `GRADLE_USER_HOME`. 의존성은 이미지에 미리 받아 둔 읽기 전용 cache(`GRADLE_RO_DEP_CACHE`, `:ro` mount)로 읽는다. harness 가 Agent 시작 전에 이미지의 `wrapper/dists` 를 빈 `GRADLE_USER_HOME` 으로 복사한다. Agent 명령에 `--offline` 은 필요 없다. Gradle 9.8.0 에서 확인한 절차와 결과는 §3.5 |
+| Gradle cache | `~/.gradle` lock 경쟁, cache 상태 차이로 시간 측정 오염 | 실행마다 빈 `GRADLE_USER_HOME`. 의존성은 이미지에 미리 받아 둔 읽기 전용 cache(`GRADLE_RO_DEP_CACHE`, 이미지 안 경로)로 읽는다. harness 가 Agent 시작 전에 이미지의 `wrapper/dists` 를 빈 `GRADLE_USER_HOME` 으로 복사한다. Agent 명령에 `--offline` 은 필요 없다. Gradle 9.8.0 에서 확인한 절차와 결과는 §3.5 |
 | pnpm | store 쓰기 경쟁 | 이미지에 store 를 두고 Agent 시작 전 harness 가 `pnpm install --offline --frozen-lockfile` 실행. 설치 시간은 측정에서 뺀다 |
 | Playwright 브라우저 | 다운로드 필요 | 이미지에 설치, `PLAYWRIGHT_BROWSERS_PATH` 고정 |
 | Claude Code 설정 | 사용자 전역 `CLAUDE.md`, hook, skill, MCP, memory 가 섞임 | 실행마다 빈 `CLAUDE_CONFIG_DIR`, `--strict-mcp-config`(빈 설정), `--settings harness-settings.json`(기록용 hook 만), `DISABLE_AUTOUPDATER=1`, CLI 버전 고정 설치 |
-| CPU · 메모리 | 동시 실행 컨테이너끼리 경쟁 | 컨테이너마다 같은 제한(예: CPU 4개, 메모리 8GB). 실험 2 의 시간 지표는 참고값으로만 쓴다 |
+| CPU · 메모리 | 동시 실행 컨테이너끼리 경쟁 | 컨테이너마다 같은 제한(CPU 4개, 메모리 8GB). 동시 실행은 실험 2 의 2개까지(실행 계약 §4.2). 실험 2 의 시간 지표는 참고값으로만 쓴다 |
 
 Gradle 읽기 전용 cache 와 pnpm store 는 두 Variant 의 build 파일과 lockfile 이 확정된 뒤 그 파일로 seed 해서 이미지에 넣는다(체크리스트 7단계 첫 항목). 3단계 이미지를 기반으로 cache 층만 더해 글꼴 · Chromium 을 바꾸지 않는다. 실험 3 기준 screenshot 과 7단계 보정 실행부터 이 이미지를 쓴다. seed 는 `./gradlew build`(Spotless 검사 포함)와 `pnpm install` 을 두 Variant 에서 모두 실행해 만든다. 3단계 pilot 이미지에는 아직 넣지 않는다.
 
@@ -1049,9 +1062,10 @@ Gradle 읽기 전용 cache 와 pnpm store 는 두 Variant 의 build 파일과 lo
 
 - 실제 secret 을 쓰지 않는다. seed 의 로그인 계정은 시험용이며 README 에 적는다
 - 컨테이너 외부 통신은 Anthropic API 도메인만 허용한다. Claude Code 공식 dev container 의 `init-firewall.sh` 방식을 따른다(https://code.claude.com/docs/en/devcontainer)
-- API 인증 값은 환경 변수로만 넣고 저장소 · 이미지에 넣지 않는다. 실험 전용 key 와 예산 한도를 쓴다. 인증 방식은 §19.2 [결정 필요]
+- 인증 값은 환경 변수로만 넣고 저장소 · 이미지에 넣지 않는다. 사용자의 Claude Max 구독 장기 인증 token(`CLAUDE_CODE_OAUTH_TOKEN`)을 쓴다(실행 계약 §4.4)
+- `WebSearch` · `WebFetch` 도구를 두 Variant 모두 끈다. 이 저장소가 공개돼 있고 `WebSearch` 는 컨테이너 egress 제한을 거치지 않는다(실행 계약 §3)
 - 컨테이너는 non-root 사용자로 실행하고 `--dangerously-skip-permissions` 는 이 조건에서만 쓴다. 공식 문서는 이 플래그를 non-root 컨테이너와 egress 제한을 함께 쓸 때 권한다
-- 운영 환경 접근 경로가 없다. host 디렉터리는 결과 출력 디렉터리 하나만 mount 한다
+- 운영 환경 접근 경로가 없다. host 디렉터리는 실행 계약 §4.3 의 경로만 연결한다. `run.json` 같은 실행 기록은 연결하지 않는다
 
 ---
 
@@ -1159,6 +1173,8 @@ B 를 완성된 A 에서 파생하는 목적은 세 가지다.
 - 경로 이름으로 Variant 를 알 수 있어 사람 검토의 맹검이 불완전하다
 - 명세 · 과제 · 두 Variant 의 설계를 같은 연구자가 했다
 - Claude Code 버전이 바뀌면 결과가 달라질 수 있다. 실험 기간 동안 버전을 고정한다
+- Agent 를 사용자의 Claude Max 구독으로 실행한다. 사용 한도를 같은 계정의 다른 사용과 나눠 쓰고, 한도에 걸린 실행은 다시 실행한다. 기록하는 비용(`total_cost_usd`)은 청구액이 아니라 Claude Code 가 token 수로 계산한 추정값이다(실행 계약 §4.4, §5)
+- 실행 기계가 개인 작업용 Mac 이다. 실험 1 · 3 실행 중 다른 Docker 작업을 하지 않고 host load average 를 기록하지만, 시간 지표에 host 부하가 섞일 수 있다(실행 계약 §4.1)
 - OPERATOR 가 READ 권한을 모두 가지므로 실험 2 에서 메뉴 정의의 권한 값이 틀려도 숨김 채점이 잡지 못한다. 권한 값은 사람 검토에서만 확인한다
 
 ---
@@ -1202,11 +1218,12 @@ B 를 완성된 A 에서 파생하는 목적은 세 가지다.
 
 | 항목 | 상태 | 영향 |
 |---|---|---|
-| Claude 모델과 effort | [결정 필요] | 비용, 결과 해석 범위. 정할 때 모델 학습 기준일과 §3.4 의 major 출시일 관계를 기록한다 |
-| 실행당 · 전체 예산 | [결정 필요] | `--max-budget-usd`, 반복 횟수 |
-| 실행 기계(이 Mac 의 Docker 또는 Linux 노드) | [결정 필요] | 이미지 CPU 아키텍처, 시각 기준 화면, 동시 실행 수 |
-| API 인증 방식 | [결정 필요] | 실험 전용 key, 예산 한도, 컨테이너에 넣는 방법(§15.3) |
-| 원본 로그 보관 위치(git, release 첨부, 별도 저장소) | [결정 필요] | 결과 공개(`_research/15` §12) |
+| Claude 모델과 effort | 결정(2026-10-03). `claude-opus-5-5`(subagent 포함), effort `medium`(Claude Code 의 Opus 5.5 기본값을 명시 고정). 학습 기준일 2026-06 은 §3.4 의 모든 major 최초 stable 출시일보다 늦다. 실행 계약 §2 | 비용, 결과 해석 범위. 정할 때 모델 학습 기준일과 §3.4 의 major 출시일 관계를 기록한다 |
+| 실행당 · 전체 예산 | 결정(2026-10-03). 실행당 45분과 계산 비용 상한 USD 15, 전체는 Claude Max 구독 사용 한도 안에서 최대 122 세션. 실행 계약 §5 | `--max-budget-usd`, 반복 횟수 |
+| 실행 기계(이 Mac 의 Docker 또는 Linux 노드) | 결정(2026-10-03). 이 Mac 의 Docker Desktop, `linux/arm64`, 동시 실행 실험 2 만 2개. 실행 계약 §4 | 이미지 CPU 아키텍처, 시각 기준 화면, 동시 실행 수 |
+| API 인증 방식 | 결정(2026-10-03, 같은 날 변경). 사용자의 Claude Max 구독 장기 인증 token, 환경 변수 전달. 실행 계약 §4.4 | 인증 수단, 사용 한도, 컨테이너에 넣는 방법(§15.3) |
+| 원본 로그 보관 위치(git, release 첨부, 별도 저장소) | 결정(2026-10-03). 실행 기계의 결과 root, 실험 종료 후 private GitHub 저장소 release asset. Git commit 하지 않음. 실행 계약 §8.4 | 결과 공개(`_research/15` §12) |
+| timeout · retry · 병렬 · 실행 환경 고정 | 결정(2026-10-03). 실행 계약 §3, §4, §6.5, §7 | 실행 사이 조건 동일성 |
 
 ## 19.3 Variant A 승인 전에 결정(체크리스트 4단계 완료 판정 전)
 
@@ -1226,6 +1243,7 @@ B 를 완성된 A 에서 파생하는 목적은 세 가지다.
 ## 구현 시작 가능 여부
 
 Phase 0A 가 끝났으므로 체크리스트 1단계(`lab/spec`)와 2단계(`lab/grading`)를 지금 시작할 수 있다. 두 단계는 §19.2 ~ §19.4 의 어느 항목에도 의존하지 않는다.
+Phase 0B(§19.2)는 실행 계약으로 결정했다. 설계와 실행 계약이 FROZEN 이면 체크리스트 3단계를 시작할 수 있다.
 
 ---
 
@@ -1277,3 +1295,80 @@ minor 15건은 모두 반영했다. 남은 세부(환불 차감액 응답 필드
 | 체크리스트와 설계서 일치 | 단계 순서 0A → 1 → 2 → 0B → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 에서 뒤 단계 산출물을 요구하는 곳 없음 |
 
 상태: FROZEN(2026-10-03). 이후 설계를 바꾸면 상태를 REVIEWED 로 되돌리고 이 절에 이유를 적는다.
+
+## 20.4 변경 1: 실험 3 판정 화면 폭(2026-10-03)
+
+FROZEN → REVIEWED. 2단계 채점 구현(`dfed3ca`) 뒤에 확인한 문제다.
+
+| 항목 | 변경 전 | 변경 후 |
+|---|---|---|
+| 판정 화면 폭 | 1280×800, 1024×768 둘 다 통과해야 함 | 1280×800 만 판정 |
+| 1024×768 | 판정 조건 | 진단. 실행 · 기록만 하고 판정 · 점수에 쓰지 않음 |
+| 채점 구현 | `tasks/exp3/exp3.spec.ts` 한 파일에서 두 폭 실행 | 판정은 `tasks/exp3/`(묶음 `exp3`), 진단은 `diagnostics/exp3-1024.spec.ts`(묶음 `diag-exp3-1024`, 계정 `diag.long80` · `diag.long120`). 공용 절차는 `tasks/exp3/long-department.ts` |
+| 위치 조건 문구 | "bounding box 가 표 컨테이너와 viewport 안에 보인다" | 구현과 같게 "보이고, 가로 범위가 표 컨테이너와 viewport 안". 판정 내용은 같다 |
+| 기준선 확인 단계 | §8.3 에 "체크리스트 6단계" | 체크리스트와 같은 "7단계"로 맞춤(4차 확인에서 체크리스트만 옮겨진 것) |
+
+이유: 과제 문구는 "부서명이 80자 이상일 때 액션 버튼이 밀려난다" 이고 화면 폭을 말하지 않는다. 문구가 가리키는 정상 화면 기준은 `ui.md` 의 "기준 화면 폭 1280px" 하나다. 1024×768 을 판정에 넣으면 Agent 에게 공개되지 않은 요구사항을 숨김 채점이 검사하게 되고, 실험 3 이 측정하려는 국소 UI 수정(관리자 계정 표만 고치는 수정)이 1024px 에서 실패해 오답으로 처리될 수 있다.
+판정 높이는 기존 값 800 을 유지했다. 채점 기본 viewport(`playwright.config.ts`), `conventions.md` 의 Variant E2E viewport, "다른 목록 화면 4개" 기준 screenshot 이 모두 1280×800 이라 바꾸면 기존 판정 의미가 달라진다.
+
+독립 검토(문서 맥락을 공유하지 않는 별도 세션): blocker 0, major 0, minor 8. 검토자는 FROZEN 재확정에 동의했다.
+확인 항목은 공개 과제 대비 비공개 요구사항, 진단 결과가 판정 경로에 주는 영향, 1280 판정 의미 보존, 구현과 문서 일치 네 가지다.
+
+| minor | 수정 |
+|---|---|
+| 진단의 `testInfo.attach(body)` 는 통과한 시험에서 파일로 남지 않음 | screenshot 과 측정값을 `testInfo.outputPath` 에 파일로 쓴다. 측정 전에 screenshot 을 남긴다 |
+| 진단과 판정이 같은 loginId 를 써서 `run.sh` 밖에서 함께 실행하면 판정 계정 생성이 409 | 진단 계정을 `diag.long80` · `diag.long120` 으로 분리 |
+| 진단 묶음 이름 `exp3-diagnostic` 이 `junit-exp3*` glob 에 걸림, 진단 결과 위치 미정 | 묶음 이름 `diag-exp3-1024`. 결과 위치와 harness 처리는 실행 계약 문서에서 정한다 |
+| 설계는 "viewport 안" 이라 쓰고 구현은 가로 범위만 검사 | 설계 문구를 구현에 맞춤 |
+| 1280 의 근거로 Agent 가 볼 수 없는 `ui.md` 만 듦 | Variant E2E viewport 1280×800 을 근거에 더함 |
+| 숨겨진 버튼이면 단정 전에 TypeError, 실패 메시지에 loginId 없음 | 측정값이 null 을 허용하고 단정 label 과 loginId 를 남김 |
+| 체크리스트 2단계에 진단 묶음 없음 | 항목 추가 |
+| 같은 port 로 동시 실행 시 다른 실행의 애플리케이션에 붙을 수 있음 | `run.sh` · README 에 같은 port 동시 실행 금지를 적음 |
+
+수정 후 확인: `pnpm typecheck` 통과, 묶음 `exp3` 는 1280×800 판정 시험 3개, 묶음 `diag-exp3-1024` 는 진단 시험 2개를 나열하고, 두 묶음을 한 번에 주면 `run.sh` 가 exit 2 로 거부한다.
+판정: blocker 0, major 0. 상태를 FROZEN 으로 되돌린다.
+
+## 20.5 변경 2: Phase 0B 결정(2026-10-03)
+
+FROZEN → REVIEWED. §19.2 의 결정 항목을 `_design/experiment-execution-contract-v0.1.md` 로 확정했다. 이 결정이 바꾸는 설계 서술:
+
+| 위치 | 변경 전 | 변경 후 |
+|---|---|---|
+| §8.2 병합과 측정 1 | 8개 동시 시작 | 8개 실행, 동시 2개. 실행이 서로 격리돼 쌍별 충돌 결과는 동시 실행 수와 무관 |
+| §14.5 | `results/<run-id>/` 아래 평면 목록 | 실행 계약 §8 의 구성(설정 · 관찰 · 원본 분리). `grading.json` 을 `result.json` 의 `grading` 으로 대신 |
+| §14.6 | 예산 [결정 필요], 실험 2 8개 동시 | 실행당 USD 15, 실험 2 동시 2개 |
+| §15.2 | CPU · 메모리 "예: 4개, 8GB" | 4개, 8GB 로 확정 |
+| §15.3 | 인증 방식 [결정 필요] | Console workspace API key. `WebSearch` · `WebFetch` 끔 |
+| §17 | - | 개인 작업 기계의 host 부하 한계 추가 |
+| §19.2 | [결정 필요] 5건 | 결정 |
+| §8.2 숨김 채점 | 순차 통합 뒤 채점만 서술 | 실행마다 하는 채점을 "개별 과제 판정" 으로 구분 |
+| §14.5 | Variant 코드(가림), 각 줄에 수신 시각 | Variant a · b 를 기록하고 지표 계산은 읽지 않음. 수신 시각은 별도 파일 |
+
+실험 2 의 동시 실행 수를 바꾼 이유: 이 Mac(10 core, 32GB)에서 CPU 4개 · 메모리 8GB 컨테이너 8개(32 CPU, 64GB)를 동시에 실행할 수 없다. 컨테이너 제한을 줄이면 실험 1 · 3 과 실행 조건이 달라지고 메모리 부족 종료가 Agent 실패로 섞인다. 설계 §19.2 는 실행 기계 결정의 영향으로 동시 실행 수를 이미 적어 두었다.
+
+실행 계약 1차 독립 검토: blocker 0, major 4, minor 14, FROZEN 비동의. 지적과 수정은 실행 계약 §12 에 적었다. 설계 쪽 반영은 위 표의 §8.2 숨김 채점 · §14.5 행과 §19.2 의 effort 변경(`high` → `medium`)이다.
+실행 계약 2차 · 3차 확인: 2차 blocker 0, major 2, minor 9 → 반영. 3차 blocker 0, major 0, minor 4 → 반영하고 검토자가 FROZEN 에 동의했다. 지적과 수정은 실행 계약 §12.
+판정: blocker 0, major 0. 설계와 실행 계약을 FROZEN 으로 되돌린다. 체크리스트 3단계를 시작할 수 있다.
+
+## 20.6 변경 3: 인증 방식(2026-10-03)
+
+FROZEN → REVIEWED. 사용자 결정으로 Agent 인증을 실험 전용 API key 에서 사용자의 Claude Max 구독으로 바꿨다. §15.3 과 §19.2 의 인증 · 예산 행을 고쳤고, 규칙은 실행 계약 §4.4 · §5.2 에 있다. 실행 기계는 사용자 결정으로 이 Mac 을 유지했고, Docker Desktop VM 메모리를 20GB 로 올렸다(실행 계약 §4.1).
+
+독립 검토: 1차 blocker 0, major 2(한도 도달 문구 분류, usage credits), minor 8. 반영 뒤 재확인 blocker 0, major 0, minor 6. 검토자가 FROZEN 에 동의했고 minor 도 반영했다. 지적과 수정은 실행 계약 §12 7차 · 8차.
+판정: blocker 0, major 0. 설계를 FROZEN 으로 되돌린다.
+
+## 20.7 변경 4: hook 기록 범위와 내보내기 검사(2026-10-03)
+
+FROZEN → REVIEWED. 컨테이너 단계 독립 검토(실행 계약 §12 9차)에서 설계 문장과 관련된 지적 셋을 반영했다.
+
+- §14.2 · §14.3: 실패한 Bash 는 `PostToolUse` 가 아니라 `PostToolUseFailure` hook 을 실행한다. 두 hook 모두에서 시험 결과를 복사하고, 결과 파일 경로를 Agent 의 현재 디렉터리가 아니라 작업 디렉터리 루트 기준으로 찾는다. 시험 명령 이름 패턴을 없애고 모든 Bash 명령 뒤에 새 결과 파일을 복사한다. 패턴은 `./gradlew build` · `check`, `pnpm --filter` 처럼 시험을 실행하는 명령을 놓쳤다(재확인에서 지적). 이 수정이 없으면 실패한 시험 실행과 `backend/` 에서 실행한 시험의 결과 파일이 빠져 §14.4 의 재시도 횟수 · 첫 신뢰 가능한 시험 시간 입력이 사라진다
+- §15.1: 지침 파일 검사를 하위 디렉터리와 `CLAUDE.local.md` 까지 넓히고 이름을 대소문자 없이 비교한다. 금지 문자열 검색에 경로 이름과 binary 파일을 더했다. Claude Code 는 하위 디렉터리의 `CLAUDE.md` 와 루트의 `CLAUDE.local.md` 를 읽으므로, 한 Variant 에만 있으면 Variant 밖의 차이가 생긴다
+
+- §14.4: hook 의 복사 조건에서 이름 패턴을 없애면서, 재시도 횟수 · 첫 신뢰 가능한 시험 시간이 쓰는 "시험 명령" 의 정의를 지표 표에 따로 적었다(실행 계약 §12 10차의 남은 minor)
+
+실험 조건(모델, 도구, 지침, 과제)은 바뀌지 않는다.
+
+독립 검토: 실행 계약 §12 9차(major 9 · minor 10)와 10차(blocker 0, major 0, minor 8 → 반영 확인 blocker 0, major 0, minor 1). 검토자가 변경 4 의 FROZEN 에 동의했고 남은 minor 1건(§14.4 시험 명령 정의)도 반영했다.
+판정: blocker 0, major 0. 설계를 FROZEN 으로 되돌린다.
+
+후속 수정(2026-10-03, PR #5 리뷰): §14.3 의 결과 파일 선택을 시각 비교에서 명령 전후 파일 목록 비교로 바꿨다. 리뷰 환경에서 새 파일의 수정 시각이 명령 시작 시각보다 이르게 기록돼 복사가 빠졌다. 실험 조건은 바뀌지 않는다.

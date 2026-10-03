@@ -1,0 +1,7 @@
+{
+  "hooks": {
+    "PreToolUse": [{ "matcher": "*", "hooks": [{ "type": "command", "command": "node /opt/cc/record.mjs pre" }] }],
+    "PostToolUse": [{ "matcher": "*", "hooks": [{ "type": "command", "command": "node /opt/cc/record.mjs post" }] }],
+    "PostToolUseFailure": [{ "matcher": "*", "hooks": [{ "type": "command", "command": "node /opt/cc/record.mjs post" }] }]
+  }
+}
