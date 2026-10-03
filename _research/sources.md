@@ -1067,3 +1067,410 @@
   - sparse-checkout 설정은 worktree별로 관리 가능
 - 책에서의 용도:
   - Worktree를 줄이는 전략과 Worktree 자체를 저비용화하는 전략을 별도로 비교해야 한다는 반론 근거
+
+
+---
+
+## P. Long-Horizon Agent Maintenance
+
+### P1. SlopCodeBench
+
+- URL: https://arxiv.org/abs/2603.24755
+- Date: 2026
+- 최신 v2 Scope: 36 problems, 196 checkpoints, 15 models, 6 providers
+- 핵심:
+  - best strict checkpoint solve rate 14.8%, 전체 문제를 끝까지 완전히 푼 사례 없음
+  - 77% trajectory에서 structural erosion 증가, 75.5%에서 verbosity 증가
+  - 비교한 473개 OSS Python repo 대비 Agent code가 약 2.3배 verbose, 2.0배 structurally eroded
+  - quality-aware prompt가 초기 품질은 개선하지만 장기 열화 추세를 멈추지 못함
+- 책에서의 용도:
+  - Entropy Resistance
+  - snapshot quality보다 erosion velocity를 측정해야 하는 근거
+- 상세: `20-iterative-structural-erosion.md`
+
+### P2. Is Agent Code Less Maintainable Than Human Code?
+
+- URL: https://arxiv.org/abs/2606.21804
+- Date: 2026
+- 핵심:
+  - Agent-authored code 위의 follow-up task resolve rate가 최대 13.1% 감소
+  - 전통 maintainability metric만으로 차이를 충분히 설명하지 못함
+- 책에서의 용도:
+  - Agent-to-Agent Maintainability
+
+### P3. ChainSWE
+
+- URL: https://arxiv.org/abs/2607.02606
+- Date: 2026
+- Scope: 54 Python projects, 304 chronological issues
+- 핵심:
+  - 이전 Agent 변경을 유지한 상태로 연속 issue를 해결
+  - chain이 길어질수록 성능이 최대 70% 감소
+- 책에서의 용도:
+  - persistent repository evolution
+
+### P4. SWE-CI
+
+- URL: https://arxiv.org/abs/2603.03823
+- Date: 2026
+- Scope: 100 tasks, 평균 233일 / 71 consecutive commits
+- 핵심:
+  - 일회성 patch보다 long-term CI/maintenance ability 평가
+- 책에서의 용도:
+  - 시간축 유지보수성
+
+### P5. To What Extent Does Agent-generated Code Require Maintenance?
+
+- URL: https://arxiv.org/abs/2605.06464
+- Date: 2026
+- Scope: 100 popular repositories, 1,000+ files, 약 3,200 changes
+- 핵심:
+  - Agent-generated file도 지속적인 후속 유지보수가 필요
+  - extension이 흔한 변경 형태이며 후속 유지보수의 큰 비중은 사람이 수행
+- 책에서의 용도:
+  - AI code도 완성 산출물이 아니라 진화하는 코드라는 근거
+
+### P6. EvoCode-Bench
+
+- Date: 2026
+- Scope: 26 stateful tasks, 227 rounds, persistent workspace 5~15 rounds
+- 핵심:
+  - 다수 Agent에서 single-round와 persistent multi-turn 성능 격차가 큼
+- 책에서의 용도:
+  - 초기 benchmark 점수와 장기 evolution 성능의 차이
+
+## Q. Requirement / Specification Quality
+
+### Q1. SWE-RPG
+
+- URL: https://arxiv.org/abs/2608.09072
+- Date: 2026
+- Scope: 31 Python/Java repositories, 163 tasks
+- 핵심:
+  - requirement clarification / implementation planning / code generation을 분리 평가
+  - implicit-requirement recovery가 24.5~46.0% 실행에서 주요 병목
+- 책에서의 용도:
+  - Invariant Discoverability
+- 상세: `21-requirement-discoverability.md`
+
+### Q2. UnderSpecBench — Coding Agents Are Guessing
+
+- URL: https://arxiv.org/abs/2607.02294
+- Date: 2026
+- Scope: 69 DevOps task families, 2,208 prompt variants
+- 핵심:
+  - intent clarity, target certainty, blast radius 정보를 통제해 평가
+  - 행동한 실행의 55.8~67.8%가 하나 이상의 action boundary 위반
+  - target ambiguity에서 Agent가 질문/보류보다 추측 행동을 할 수 있음
+- 책에서의 용도:
+  - 명확한 task boundary와 safe non-action
+
+### Q3. ClarifyCodeBench
+
+- URL: https://arxiv.org/abs/2607.00711
+- Date: 2026
+- 핵심:
+  - coding capability와 ambiguity clarification capability가 자동으로 일치하지 않음
+- 책에서의 용도:
+  - clarification을 별도 capability로 봐야 하는 근거
+
+### Q4. SLUMP — When the Specification Emerges
+
+- URL: https://arxiv.org/abs/2603.17104
+- Date: 2026
+- Scope: 20 ML papers, 371 atomic components
+- 핵심:
+  - progressive specification에서 structural integration/faithfulness 저하
+  - ProjectGuard 외부 state layer가 Claude Code의 single-shot 대비 faithfulness gap 약 90% 회복
+- 책에서의 용도:
+  - durable project state, spec drift
+
+### Q5. E2E-SWE
+
+- URL: https://arxiv.org/abs/2609.38335
+- Date: 2026
+- Scope: 186 full-repository generation tasks, 11 languages
+- 핵심:
+  - task 자체를 model rollout과 사람 검토로 반복 audit
+- 책에서의 용도:
+  - 실험 task ambiguity audit
+
+## R. Verifier / Benchmark Validity
+
+### R1. ReviveBench
+
+- URL: https://arxiv.org/abs/2609.36161
+- Date: 2026-09-28
+- 핵심:
+  - benchmark verifier 감사에서 28개 defect 발견
+  - 그중 24 false negative, 2 false positive
+  - reference method, independent candidates, artifact 재계산으로 verifier calibration
+- 책에서의 용도:
+  - Verifier Validity
+- 상세: `22-verifier-validity.md`
+
+### R2. AgentSuite / COBA
+
+- URL: https://proceedings.mlr.press/v306/suh26a.html
+- Venue: ICML 2026
+- 핵심:
+  - User / Environment / Ground Truth / Evaluation 구성요소별 benchmark audit
+  - expert judgment 대비 F1 약 0.791~0.874
+- 책에서의 용도:
+  - benchmark 자체를 software artifact처럼 감사
+
+### R3. OpenAI — Why SWE-bench Verified no longer measures frontier coding capabilities
+
+- URL: https://openai.com/index/why-we-no-longer-evaluate-swe-bench-verified/
+- Date: 2026-02-23
+- 핵심:
+  - 감사한 138 task 중 59.4%에서 material test/problem-description issue
+  - narrow/wide test mismatch와 contamination 문제
+- 책에서의 용도:
+  - human-verified benchmark도 verifier 오류가 가능하다는 근거
+
+### R4. OpenAI — Separating signal from noise in coding evaluations
+
+- URL: https://openai.com/index/separating-signal-from-noise-coding-evaluations/
+- Date: 2026-07-08
+- 핵심:
+  - SWE-Bench Pro public split 731 task 감사
+  - Agent audit 27.4%, human annotation 34.1% broken; 전체 약 30% 추정
+- 책에서의 용도:
+  - task/spec/test audit 필요성
+
+### R5. PAIChecker
+
+- URL: https://arxiv.org/abs/2607.28587
+- Date: 2026
+- 핵심:
+  - SWE-bench Verified에서 PR-Issue misalignment 13.6% 관찰
+- 책에서의 용도:
+  - reference patch 자체도 완전한 ground truth가 아닐 수 있음
+
+## S. Visual Feedback for Coding Agents
+
+### S1. WebGen-Bench
+
+- URL: https://arxiv.org/abs/2505.03733
+- Venue: NeurIPS 2025 Datasets & Benchmarks
+- Scope: 101 instructions, 647 UI tests
+- 핵심:
+  - 실제 web navigation을 통한 UI behavior 평가
+- 책에서의 용도:
+  - source correctness와 UI correctness 분리
+- 상세: `23-visual-feedback-loop.md`
+
+### S2. WebGen-Agent
+
+- URL: https://arxiv.org/abs/2509.22644
+- Venue: ICLR 2026
+- 핵심:
+  - screenshot VLM feedback + GUI-agent feedback + iterative refinement
+  - Claude 3.5 Sonnet WebGen 정확도 26.4% → 51.9% 보고
+- 책에서의 용도:
+  - screenshot을 최종 QA가 아니라 edit feedback으로 활용
+
+### S3. ReLook
+
+- URL: https://aclanthology.org/2026.acl-long.1167/
+- Venue: ACL 2026
+- 핵심:
+  - visual critic 기반 generate-diagnose-refine loop
+  - 세 web coding benchmark에서 강한 baseline보다 개선 보고
+- 책에서의 용도:
+  - Visual Diagnosability
+
+### S4. CUA-SWE
+
+- URL: https://arxiv.org/abs/2609.32600
+- Date: 2026-09-26
+- 핵심:
+  - CLI/code 작업과 computer-use/visual interface를 함께 요구하는 SWE benchmark
+- 책에서의 용도:
+  - 실행 화면도 repository maintenance의 evidence가 될 수 있다는 근거
+
+## T. Architecture Drift / Erosion
+
+### T1. Mining Architectural Quality Under Agentic AI Adoption
+
+- URL: https://arxiv.org/abs/2606.13298
+- Venue: SEAA 2026 STREAM
+- Scope: 151 Java repositories, 1,811 monthly Arcan snapshots
+- 핵심:
+  - raw architectural smell +1.1%, p=.82
+  - LOC +12.8%, p=.003
+  - smell density -6.7%, p=.004
+  - Agentic AI adoption 후 architecture 악화/개선을 단순 결론 내리기 어려움
+  - density 개선은 denominator effect일 수 있음
+- 책에서의 용도:
+  - "Agent가 architecture를 망친다"는 단순 주장에 대한 반론
+- 상세: `24-architecture-drift-and-erosion.md`
+
+### T2. Software Architecture Erosion: A Systematic Mapping Study
+
+- URL: https://doi.org/10.1002/smr.2423
+- Date: 2022
+- Scope: 73 studies
+- 핵심:
+  - architecture erosion의 manifestation/cause/detection/mitigation 정리
+- 책에서의 용도:
+  - AI 이전부터 존재하던 문제와 Agent 시대를 연결
+
+### T3. Architectural Decay as Predictor of Issue- and Change-Proneness
+
+- URL: https://arxiv.org/abs/2102.09835
+- DOI: https://doi.org/10.1109/ICSA51549.2021.00017
+- Date: 2021
+- Scope: 10 OSS systems
+- 핵심:
+  - architecture decay signal과 이후 issue/change-proneness의 관계
+- 책에서의 용도:
+  - architecture signal을 실제 변경 비용과 연결
+
+## U. Verification Efficiency / Test Selection
+
+### U1. Google — Regression Test Selection at Scale
+
+- URL: https://research.google/pubs/regression-test-selection-at-scale-2/
+- Venue: ICSME 2026 Industry
+- Scope: 10 core libraries, 평균 약 220,000 tests
+- 핵심:
+  - commit당 2,000 tests
+  - 전체 execution cost 약 0.9%
+  - failing commit의 40%에서 regression 탐지
+- 책에서의 용도:
+  - Verification Efficiency / Time to First Trustworthy Signal
+- 상세: `25-verification-efficiency.md`
+
+### U2. Develocity — Predictive Test Selection
+
+- URL: https://docs.gradle.com/develocity/predictive-test-selection/
+- Version: 2026.2 docs
+- 핵심:
+  - change/test history 기반 relevant test selection
+  - pre-merge selected tests + post-merge remaining tests로 빠른 signal과 전체 coverage 분리
+- 책에서의 용도:
+  - verification funnel 산업 사례
+
+### U3. Predictive Test Selection Without Historical Failure Data
+
+- Venue: ICSME 2026 Industry
+- 핵심:
+  - historical failure label 없이 code/test co-evolution signal로 selection
+- 책에서의 용도:
+  - 새/빠르게 변하는 Agent-first repository의 test selection
+
+## V. Context Trust / Agent Security
+
+### V1. GitInject
+
+- URL: https://arxiv.org/abs/2606.09935
+- Date: 2026
+- 핵심:
+  - live GitHub AI workflows, 4 providers, 11 attack classes
+  - 테스트한 모든 provider가 default configuration에서 적어도 한 attack class에 취약
+  - 주요 문제를 model보다 CI credential/config/trust 구조에서 찾음
+- 책에서의 용도:
+  - Context Trust Boundary
+- 상세: `26-context-trust-boundary.md`
+
+### V2. Do Not Mention This to the User: Malicious Agent Skills in the Wild
+
+- URL: https://www.usenix.org/conference/usenixsecurity26/presentation/liu-yi
+- Venue: USENIX Security 2026
+- Scope: 98,380 skills, 157 confirmed malicious, 632 vulnerabilities, 13 techniques
+- 핵심:
+  - credential theft/RCE와 adversarial instruction 기반 agent manipulation
+- 책에서의 용도:
+  - plugin/skill provenance
+
+### V3. RepoGuardBench
+
+- URL: https://github.com/DaoyuanLi2816/RepoGuardBench
+- Date: 2026 workshop artifact
+- 핵심:
+  - README, issue, comments, logs, agent-rule file의 repository-borne prompt injection
+- 주의:
+  - archival evidence보다 낮은 무게로 사용
+
+### V4. SOPE
+
+- URL: https://proceedings.mlr.press/v306/lin26r.html
+- Venue: ICML 2026
+- Scope: 27,216 cases, 324 transformed real MCP servers
+- 핵심:
+  - MCP/tool 환경의 covert privacy exfiltration 위험
+- 책에서의 용도:
+  - tool response도 trust boundary 대상
+
+### V5. ShieldMCP
+
+- URL: https://aclanthology.org/2026.acl-industry.58/
+- Venue: ACL Industry 2026
+- 핵심:
+  - runtime tool invocation/response validation으로 공격 성공 감소 보고
+- 책에서의 용도:
+  - action-time policy enforcement
+
+### V6. MCP Security Landscape
+
+- DOI: https://doi.org/10.1145/3796519
+- Venue: ACM TOSEM 2026
+- 핵심:
+  - MCP ecosystem의 security/trust 문제 정리
+
+## W. Long-Running Continuity / Handoff
+
+### W1. Anthropic — Effective harnesses for long-running agents
+
+- URL: https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents
+- Date: 2025-11-26
+- 핵심:
+  - initializer/coding agent 분리
+  - git, progress artifact, feature list, executable app으로 context-window 간 continuity 유지
+- 책에서의 용도:
+  - Recoverability
+- 상세: `27-long-running-continuity.md`
+
+### W2. Anthropic — Harness design for long-running application development
+
+- URL: https://www.anthropic.com/engineering/harness-design-long-running-apps
+- Date: 2026-03-24
+- 핵심:
+  - planner/generator/evaluator
+  - sprint contract
+  - file-based communication
+  - Playwright 기반 E2E evaluation
+  - 모델 발전에 따라 harness assumption도 재검증해야 함
+- 책에서의 용도:
+  - 특정 모델 한계를 architecture 원칙으로 고정하지 않기
+
+### W3. NL2Repo-Bench
+
+- URL: https://proceedings.mlr.press/v306/ding26j.html
+- Venue: ICML 2026
+- 핵심:
+  - long-horizon repository construction에서 premature termination, global coherence loss, fragile cross-file dependency 관찰
+- 책에서의 용도:
+  - 장기 작업 continuity
+
+### W4. SLUMP / ChainSWE / SWE-CI
+
+- 상세 출처: Q4, P3, P4
+- 핵심:
+  - progressive specification과 persistent repository evolution 모두 durable project state 필요성을 지지
+
+## 최종 수집 판단 — 2026-10-03
+
+`20~28` 리서치 추가로 기존 "갱신된 다음 수집 우선순위"의 주요 공백을 채웠다.
+
+이후에는 범위를 더 넓히지 않는다. 새 자료는 다음 중 하나일 때만 추가한다.
+
+1. core principle을 실질적으로 반박
+2. metric 정의를 바꿈
+3. 실험 validity 문제를 발견
+4. 현재보다 훨씬 큰/강한 empirical evidence
+5. 실제 A/B 실험 결과와 충돌하는 설명 제공
+
+상세: `28-research-gap-closure.md`
