@@ -134,6 +134,36 @@ class OrderServiceTest {
     verifyNoInteractions(memberService);
   }
 
+  @Test
+  @DisplayName("[ORD-16] 상품 금액이나 결제 금액이 long 범위를 넘으면 VALIDATION_FAILED, 범위 끝 값은 그대로 계산")
+  void amountOverflowIsValidationFailure() {
+    givenMember(1L, MemberGrade.GENERAL, MemberStatus.ACTIVE);
+    givenMember(4L, MemberGrade.VIP, MemberStatus.ACTIVE);
+
+    assertThat(orderService.preview(1L, singleLine(Long.MAX_VALUE - 3_000)).totalAmount())
+        .isEqualTo(Money.won(Long.MAX_VALUE));
+    assertThat(orderService.preview(4L, singleLine(Long.MAX_VALUE)).totalAmount())
+        .isEqualTo(Money.won(Long.MAX_VALUE));
+    assertError(
+        () -> orderService.preview(1L, singleLine(Long.MAX_VALUE - 2_999)),
+        ErrorCode.VALIDATION_FAILED);
+    assertError(
+        () -> orderService.create(1L, singleLine(Long.MAX_VALUE)), ErrorCode.VALIDATION_FAILED);
+    assertError(
+        () ->
+            orderService.create(
+                4L,
+                List.of(
+                    OrderLine.of("상품", Money.won(Long.MAX_VALUE), 1),
+                    OrderLine.of("상품", Money.won(1), 1))),
+        ErrorCode.VALIDATION_FAILED);
+    verify(orderRepository, never()).insert(anyLong(), any(), any(), any(), any(), anyList());
+  }
+
+  private static List<OrderLine> singleLine(long unitPrice) {
+    return List.of(OrderLine.of("상품", Money.won(unitPrice), 1));
+  }
+
   private void givenMember(long id, MemberGrade grade, MemberStatus status) {
     when(memberService.getSummary(id)).thenReturn(new MemberSummary(id, grade, status));
   }

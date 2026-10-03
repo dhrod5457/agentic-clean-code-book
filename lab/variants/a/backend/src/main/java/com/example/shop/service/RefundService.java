@@ -45,10 +45,13 @@ public class RefundService {
     return refundRepository.findAll();
   }
 
-  /** 요청 조건은 requirements.md §3.5 의 순서로 확인한다. 주문 · 배송 상태는 바꾸지 않는다. */
+  /**
+   * 요청 조건은 requirements.md §3.5 의 순서로 확인한다. 주문 · 배송 상태는 바꾸지 않는다. 주문 행을 잠가 같은 주문의 요청 · 승인 · 거절을
+   * 직렬화하므로 처리 중인 요청은 주문마다 하나뿐이다.
+   */
   @Transactional
   public Refund request(long orderId, Money amount, String reason) {
-    OrderSummary order = orderService.getSummary(orderId);
+    OrderSummary order = orderService.getSummaryForUpdate(orderId);
     if (order.status() != OrderStatus.PAID) {
       throw new BusinessException(ErrorCode.REFUND_ORDER_NOT_PAID);
     }
@@ -72,8 +75,9 @@ public class RefundService {
 
   @Transactional
   public Refund approve(long id) {
-    Refund refund = getRequested(id);
-    OrderSummary order = orderService.getSummary(refund.orderId());
+    LockedRefund locked = lockRequested(id);
+    Refund refund = locked.refund();
+    OrderSummary order = locked.order();
     List<Refund> previousApproved =
         refundRepository.findByOrderId(refund.orderId()).stream()
             .filter(r -> r.isApproved() && r.id() != id)
@@ -81,15 +85,19 @@ public class RefundService {
     Money deduction = deliveryFeeDeduction(refund, order, previousApproved);
     Money refunded = refund.amount().minus(deduction);
     OffsetDateTime now = OffsetDateTime.now(clock);
-    refundRepository.approve(id, deduction, refunded, now);
+    if (refundRepository.approve(id, deduction, refunded, now) != 1) {
+      throw new BusinessException(ErrorCode.REFUND_ALREADY_PROCESSED);
+    }
     return refund.approved(deduction, refunded, now);
   }
 
   @Transactional
   public Refund reject(long id) {
-    Refund refund = getRequested(id);
+    Refund refund = lockRequested(id).refund();
     OffsetDateTime now = OffsetDateTime.now(clock);
-    refundRepository.reject(id, now);
+    if (refundRepository.reject(id, now) != 1) {
+      throw new BusinessException(ErrorCode.REFUND_ALREADY_PROCESSED);
+    }
     return refund.rejected(now);
   }
 
@@ -115,6 +123,15 @@ public class RefundService {
     return Money.min(deliveryFeePolicy.baseFee(), refund.amount());
   }
 
+  /**
+   * 환불의 주문 행을 잠근 뒤 환불을 다시 읽는다. 잠그기 전에 읽은 상태는 다른 요청이 바꿀 수 있으므로 잠근 뒤에 {@code REQUESTED} 인지 다시 확인한다.
+   */
+  private LockedRefund lockRequested(long id) {
+    Refund unlocked = getRequested(id);
+    OrderSummary order = orderService.getSummaryForUpdate(unlocked.orderId());
+    return new LockedRefund(getRequested(id), order);
+  }
+
   private Refund getRequested(long id) {
     Refund refund =
         refundRepository
@@ -125,6 +142,8 @@ public class RefundService {
     }
     return refund;
   }
+
+  private record LockedRefund(Refund refund, OrderSummary order) {}
 
   private static Money approvedAmount(List<Refund> refunds) {
     return refunds.stream()

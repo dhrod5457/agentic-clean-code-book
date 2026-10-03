@@ -69,30 +69,38 @@ public class RefundRepository {
     return keyHolder.getKeyAs(Long.class);
   }
 
-  public void approve(
+  /** {@code REQUESTED} 환불만 승인한다. 바꾼 행 수를 돌려준다. */
+  public int approve(
       long id, Money deliveryFeeDeduction, Money refundedAmount, OffsetDateTime processedAt) {
-    jdbcClient
+    return jdbcClient
         .sql(
             """
             UPDATE refunds
             SET status = :status, delivery_fee_deduction = :deduction,
                 refunded_amount = :refundedAmount, processed_at = :processedAt
-            WHERE id = :id
+            WHERE id = :id AND status = :requested
             """)
         .param("status", RefundStatus.APPROVED.name())
         .param("deduction", deliveryFeeDeduction.value())
         .param("refundedAmount", refundedAmount.value())
         .param("processedAt", processedAt)
         .param("id", id)
+        .param("requested", RefundStatus.REQUESTED.name())
         .update();
   }
 
-  public void reject(long id, OffsetDateTime processedAt) {
-    jdbcClient
-        .sql("UPDATE refunds SET status = :status, processed_at = :processedAt WHERE id = :id")
+  /** {@code REQUESTED} 환불만 거절한다. 바꾼 행 수를 돌려준다. */
+  public int reject(long id, OffsetDateTime processedAt) {
+    return jdbcClient
+        .sql(
+            """
+            UPDATE refunds SET status = :status, processed_at = :processedAt
+            WHERE id = :id AND status = :requested
+            """)
         .param("status", RefundStatus.REJECTED.name())
         .param("processedAt", processedAt)
         .param("id", id)
+        .param("requested", RefundStatus.REQUESTED.name())
         .update();
   }
 

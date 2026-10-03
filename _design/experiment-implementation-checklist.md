@@ -148,7 +148,7 @@ Variant 보다 먼저 쓴다. 과제 문구도 이 단계에서 먼저 고정한
   - 완료 조건: route · 메뉴 · 화면 권한이 `src/app/adminRoutes.tsx` 한 표에 있다
   - 완료 조건: 공통 `DataTable` 이 `ui.md` 의 셀 줄바꿈 · 가로 스크롤 동작을 따른다(실험 3 의 원인, 설계 §8.3)
 - [x] 시험: 시나리오 ID 마다 1개, 이름에 ID 포함. 통합 시험 2개. E2E 와 보조 함수(`login`, `createStaff`, `createOrder`)
-  - 결과: `scenarios.md` 의 ID 74개가 시험 이름에 한 번씩(누락 · 중복 0). `CheckoutFlowIT`, `RefundFlowIT`. E2E 5개와 `login`, `createStaff`, `createOrder`, `payOrder`, `requestRefund`
+  - 결과: `scenarios.md` 의 ID 79개(PR #5 리뷰로 ORD-16 · 17, RFD-17 ~ 19 추가)가 시험 이름에 한 번씩(누락 · 중복 0). `CheckoutFlowIT`, `RefundFlowIT`. E2E 5개와 `login`, `createStaff`, `createOrder`, `payOrder`, `requestRefund`
 - [x] README: 절 구성 = 개요, 실행, 시험 명령(필터 예 `./gradlew test --tests '*StaffServiceTest'`, "완료 전 `./gradlew test` 와 `pnpm test` 실행" 문장 포함), 디렉터리 구조, 규칙, 시험용 로그인 계정
 - [x] `./scripts/verify-all.sh`
   - 결과: 실행 이미지에서 `pnpm install --frozen-lockfile` 뒤 exit 0(backend `BUILD SUCCESSFUL`, Vitest 10, E2E 5)

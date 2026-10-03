@@ -10,6 +10,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -28,6 +29,7 @@ import com.example.shop.repository.RefundRepository;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -51,6 +53,12 @@ class RefundServiceTest {
 
   /** 시험마다 주문의 환불 기록. 승인 시험은 이 목록을 바꿔 가며 쓴다. */
   private final List<Refund> refundsOfOrder = new ArrayList<>();
+
+  @BeforeEach
+  void conditionalUpdatesSucceed() {
+    when(refundRepository.approve(anyLong(), any(), any(), any())).thenReturn(1);
+    when(refundRepository.reject(anyLong(), any())).thenReturn(1);
+  }
 
   @Test
   @DisplayName("[RFD-01] 결제 완료 · 출고 대기 주문(100,000원)에 30,000원 환불 요청은 요청 상태, 부분 환불")
@@ -229,8 +237,22 @@ class RefundServiceTest {
     assertApproved(approved, 0, 160_000);
   }
 
+  @Test
+  @DisplayName(
+      "[RFD-19] 주문을 잠근 뒤 REQUESTED 조건 UPDATE 가 바꾼 행이 없으면 승인 · 거절은 REFUND_ALREADY_PROCESSED")
+  void conditionalUpdateMissIsAlreadyProcessed() {
+    givenVipFreeShippingOrder(160_000);
+    givenRefunds(requested(1001L, 20_000, true));
+    when(refundRepository.approve(anyLong(), any(), any(), any())).thenReturn(0);
+    when(refundRepository.reject(anyLong(), any())).thenReturn(0);
+
+    assertError(() -> refundService.approve(1001L), ErrorCode.REFUND_ALREADY_PROCESSED);
+    assertError(() -> refundService.reject(1001L), ErrorCode.REFUND_ALREADY_PROCESSED);
+    verify(orderService, times(2)).getSummaryForUpdate(ORDER_ID);
+  }
+
   private void givenOrder(OrderStatus status, long productAmount, long deliveryFee) {
-    when(orderService.getSummary(ORDER_ID))
+    when(orderService.getSummaryForUpdate(ORDER_ID))
         .thenReturn(
             new OrderSummary(
                 ORDER_ID,

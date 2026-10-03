@@ -48,6 +48,8 @@
 | ORD-13 | component | 주문 목록: `ui.md` §5.4 의 열과 상태 이름, 금액 형식 | 화면 |
 | ORD-14 | component | 주문 상세: 주문 정보와 상품 표 | 화면 |
 | ORD-15 | web | `GET /api/admin/orders` → ID 내림차순 배열 | HTTP |
+| ORD-16 | unit | 상품 금액이나 결제 금액이 `long` 범위를 넘으면 `VALIDATION_FAILED`. GENERAL 회원 상품 금액 `Long.MAX_VALUE − 3,000` 은 결제 금액이 정확히 `Long.MAX_VALUE`, `Long.MAX_VALUE − 2,999` 는 실패, VIP 회원 상품 금액 `Long.MAX_VALUE`(배송비 0원)는 성공. 실패하면 저장하지 않는다 | 불가(경계값은 단위 시험으로 본다) |
+| ORD-17 | web | GENERAL 회원 단가 `9223372036854775807` × 1 주문 생성 · 미리보기 → 400 `VALIDATION_FAILED` | HTTP |
 
 ## 4. 환불(RFD)
 
@@ -69,6 +71,9 @@
 | RFD-14 | web | `GET /api/admin/refunds` → ID 내림차순 배열 | HTTP |
 | RFD-15 | component | 환불 목록: `REQUESTED` 행에 "승인", "거절" 버튼. 그 밖의 행에 버튼 없음. `REFUND_WRITE` 가 없으면 버튼과 "환불 요청 등록" 없음 | 화면 |
 | RFD-16 | web | 환불 요청 본문에서 `reason` 이 빈 문자열 → 400 `VALIDATION_FAILED` | HTTP |
+| RFD-17 | integration | `RefundFlowIT`: 같은 `REQUESTED` 환불에 승인 · 거절을 동시에 4번 → 하나만 성공, 나머지 409 `REFUND_ALREADY_PROCESSED`. 결과 행의 상태와 금액이 처리한 요청과 맞다 | 불가(동시 요청의 순서를 HTTP 로 고정할 수 없다) |
+| RFD-18 | integration | `RefundFlowIT`: 같은 `PAID` 주문에 환불 요청을 동시에 4번 → 하나만 201, 나머지 409 `REFUND_ALREADY_REQUESTED`. `REQUESTED` 환불은 1개 | 불가(동시 요청의 순서를 HTTP 로 고정할 수 없다) |
+| RFD-19 | unit | 승인 · 거절의 상태 변경이 `REQUESTED` 행을 바꾸지 못하면(다른 요청이 먼저 처리) 409 `REFUND_ALREADY_PROCESSED` | 불가(내부 경합 상황) |
 
 ## 5. 회원(MBR)
 
@@ -117,7 +122,7 @@
 
 ## 8. 흐름(FLW)
 
-통합 시험 두 개다. 실제 Spring context 와 H2 를 쓴다.
+통합 시험 class 는 `CheckoutFlowIT`, `RefundFlowIT` 두 개다. 실제 Spring context 와 H2 를 쓴다. `RefundFlowIT` 에는 RFD-17 · RFD-18 도 들어간다.
 
 | ID | 단계 | 입력 → 기대 | 외부 확인 |
 |---|---|---|---|

@@ -55,6 +55,16 @@ public class OrderRepository {
         .map(row -> row.toOrder(findLines(id)));
   }
 
+  /** 호출한 transaction 이 끝날 때까지 주문 행을 잠근다. 주문이 없으면 false. */
+  public boolean lockById(long id) {
+    return jdbcClient
+        .sql("SELECT id FROM orders WHERE id = :id FOR UPDATE")
+        .param("id", id)
+        .query(Long.class)
+        .optional()
+        .isPresent();
+  }
+
   /** 주문과 주문 상품을 저장하고 새 주문 ID 를 돌려준다. */
   public long insert(
       long memberId,

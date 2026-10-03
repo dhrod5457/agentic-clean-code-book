@@ -13,7 +13,9 @@ import com.example.shop.repository.OrderRepository;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.function.Supplier;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -40,13 +42,16 @@ public class OrderService {
 
   /** 주문 생성과 같은 계산을 하고 저장하지 않는다. */
   public OrderPrice preview(long memberId, List<OrderLine> lines) {
-    Money productAmount = productAmountOf(lines);
+    Money productAmount =
+        withinAmountRange(
+            () -> lines.stream().map(OrderLine::lineAmount).reduce(Money.ZERO, Money::plus));
     MemberSummary member = memberService.getSummary(memberId);
     if (!member.isOrderable()) {
       throw new BusinessException(ErrorCode.MEMBER_NOT_ORDERABLE);
     }
     Money deliveryFee = deliveryFeePolicy.feeFor(member.grade(), productAmount);
-    return new OrderPrice(productAmount, deliveryFee, productAmount.plus(deliveryFee));
+    Money totalAmount = withinAmountRange(() -> productAmount.plus(deliveryFee));
+    return new OrderPrice(productAmount, deliveryFee, totalAmount);
   }
 
   @Transactional
@@ -102,9 +107,19 @@ public class OrderService {
     return get(id).toSummary();
   }
 
-  private static Money productAmountOf(List<OrderLine> lines) {
+  /** 주문 행을 호출한 transaction 이 끝날 때까지 잠그고 요약을 돌려준다. 다른 영역이 같은 주문에 대한 처리를 직렬화할 때 쓴다. */
+  @Transactional(propagation = Propagation.MANDATORY)
+  public OrderSummary getSummaryForUpdate(long id) {
+    if (!orderRepository.lockById(id)) {
+      throw new BusinessException(ErrorCode.ORDER_NOT_FOUND);
+    }
+    return getSummary(id);
+  }
+
+  /** 금액 계산이 long 범위를 넘으면 요청 값 오류로 본다. */
+  private static Money withinAmountRange(Supplier<Money> calculation) {
     try {
-      return lines.stream().map(OrderLine::lineAmount).reduce(Money.ZERO, Money::plus);
+      return calculation.get();
     } catch (ArithmeticException e) {
       throw new BusinessException(ErrorCode.VALIDATION_FAILED);
     }

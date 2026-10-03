@@ -62,6 +62,30 @@ class OrderControllerTest extends WebSliceTestSupport {
   }
 
   @Test
+  @DisplayName(
+      "[ORD-17] 일반 회원 단가 9223372036854775807 × 1 주문은 배송비를 더하면 범위를 넘으므로 400 VALIDATION_FAILED")
+  void totalAmountOverflow() throws Exception {
+    when(memberService.getSummary(1L))
+        .thenReturn(new MemberSummary(1L, MemberGrade.GENERAL, MemberStatus.ACTIVE));
+    String body =
+        """
+        {"memberId": 1, "lines": [
+          {"productName": "상품", "unitPrice": 9223372036854775807, "quantity": 1}
+        ]}
+        """;
+
+    mockMvc
+        .perform(post("/api/orders/preview").contentType(MediaType.APPLICATION_JSON).content(body))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+    mockMvc
+        .perform(post("/api/orders").contentType(MediaType.APPLICATION_JSON).content(body))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+    verify(orderRepository, never()).insert(anyLong(), any(), any(), any(), any(), anyList());
+  }
+
+  @Test
   @DisplayName("[ORD-04] 단가 -1 인 주문 생성은 400 VALIDATION_FAILED")
   void negativeUnitPrice() throws Exception {
     mockMvc
