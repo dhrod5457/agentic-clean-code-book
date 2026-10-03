@@ -146,7 +146,8 @@ function errorKind(result: Record<string, unknown> | null, stderr: string): Erro
 }
 
 // Agent process 의 종료를 실행 계약 §6.3 의 상태로 나눈다.
-// 외부 원인 근거: 잠자기 감지, docker inspect 무응답, client 가 끝난 뒤에도 실행 중인 컨테이너(harness 시간 초과가 아닐 때)
+// 외부 원인 근거: 잠자기 감지, docker inspect 무응답, client 가 끝난 뒤에도 실행 중인 컨테이너(harness 시간 초과가 아닐 때),
+// Docker VM 의 boot id 변경(VM 재시작)
 // 컨테이너로 실행했을 때 docker inspect 로 얻은 값(docker.ts 의 settleContainer). local 실행에서는 없다
 export type ContainerExit = SettledContainer;
 
@@ -154,6 +155,7 @@ export function classifyAgent(p: ProcessResult, stream: StreamSummary, stderr: s
   if (p.spawn_error !== null) return { state: 'harness_failed', stage: 'agent_start', reason: `Agent 를 시작하지 못했다: ${p.spawn_error}` };
   if (container !== null) {
     if (container.inspect_error !== null) return { state: 'harness_failed', stage: 'agent', reason: `docker inspect 에 Docker 가 답하지 않았다: ${container.inspect_error}` };
+    if (container.vm_restarted === true) return { state: 'harness_failed', stage: 'agent', reason: 'Agent 실행 중 Docker VM 이 다시 시작됐다(boot id 변경)' };
     if (!container.found) return { state: 'harness_failed', stage: 'agent_start', reason: `Agent 컨테이너를 만들지 못했다(docker exit ${p.exit_code})` };
     if (container.error !== '' || !container.started) return { state: 'harness_failed', stage: 'agent_start', reason: `Agent 컨테이너를 시작하지 못했다: ${container.error}` };
     if (container.exit_code === START_FAILED_EXIT && stream.init_model === null && stream.result === null) {
@@ -165,14 +167,14 @@ export function classifyAgent(p: ProcessResult, stream: StreamSummary, stderr: s
   if (container !== null && container.running_after_client) return { state: 'harness_failed', stage: 'agent', reason: 'docker client 가 끝났는데 컨테이너가 실행 중이었다' };
   const resultError = stream.result !== null && (stream.result.is_error === true || (typeof stream.result.subtype === 'string' && stream.result.subtype !== 'success'));
   if (p.exit_code === 0 && !resultError) return { state: 'agent_succeeded', error_kind: null };
-  // 사용 한도 · API 오류 · 예산 한도는 Agent 가 낸 구조화된 오류라 OOM 기록보다 먼저 본다.
-  // OOMKilled 는 컨테이너 안 자식 process(Bash 의 gradle 등) 하나만 죽어도 켜진다(실행 계약 §6.3)
-  const kind = errorKind(stream.result, stderr);
-  if (kind !== 'other') return { state: 'agent_failed', error_kind: kind };
+  // 오류 result 의 사용 한도 · API 오류 · 예산 한도는 Agent 가 낸 구조화된 오류라 OOM 기록보다 먼저 본다.
+  // OOMKilled 는 컨테이너 안 자식 process(Bash 의 gradle 등) 하나만 죽어도 켜진다(실행 계약 §6.3). stderr 줄은 OOM 뒤에 본다
+  const fromResult = errorKind(stream.result, '');
+  if (fromResult !== 'other') return { state: 'agent_failed', error_kind: fromResult };
   // 메모리 제한은 실행 조건이므로 OOM 은 관찰 결과다
   if (container !== null && container.oom_killed && container.exit_code !== 0) return { state: 'agent_failed', error_kind: 'oom' };
   if (p.signal !== null) return { state: 'agent_failed', error_kind: 'signal' };
   // 컨테이너 안 process 가 signal 로 끝나면 종료 코드가 128 + signal 번호다
   if (container !== null && container.exit_code !== null && container.exit_code > 128) return { state: 'agent_failed', error_kind: 'signal' };
-  return { state: 'agent_failed', error_kind: 'other' };
+  return { state: 'agent_failed', error_kind: errorKind(stream.result, stderr) };
 }

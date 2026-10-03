@@ -68,7 +68,7 @@ test('실패한 시험 명령(PostToolUseFailure)도 시험 결과를 복사한�
 });
 
 test('시험 결과는 Agent 의 현재 디렉터리와 관계없이 작업 디렉터리 기준으로 찾고, 규약의 시험 명령을 모두 시험 명령으로 본다', () => {
-  const commands = ['./gradlew test', './scripts/verify-all.sh', 'pnpm run test', 'pnpm -C frontend test', 'pnpm --dir frontend e2e'];
+  const commands = ['./gradlew test', './scripts/verify-all.sh', 'pnpm run test', 'pnpm -C frontend test', 'pnpm --dir frontend e2e', './gradlew build', 'pnpm --filter frontend test'];
   for (const [i, command] of commands.entries()) {
     const out = tmp('hook-');
     const ws = tmp('ws-');
@@ -83,15 +83,21 @@ test('시험 결과는 Agent 의 현재 디렉터리와 관계없이 작업 디�
   }
 });
 
-test('시험이 아닌 명령은 결과 파일을 복사하지 않는다', () => {
+test('명령 실행 중 바뀐 시험 결과 파일이 없으면 복사하지 않는다', () => {
   const out = tmp('hook-');
   const cwd = tmp('ws-');
-  mkdirSync(path.join(cwd, 'backend/build/test-results'), { recursive: true });
+  const results = path.join(cwd, 'backend/build/test-results');
+  mkdirSync(results, { recursive: true });
+  const old = path.join(results, 'TEST-X.xml');
+  writeFileSync(old, '<x/>');
+  const past = new Date(Date.now() - 60_000);
+  utimesSync(old, past, past);
   const call = { tool_name: 'Bash', tool_use_id: 'toolu_2', cwd, tool_input: { command: 'ls backend' } };
   hook(out, 'pre', call, cwd);
-  writeFileSync(path.join(cwd, 'backend/build/test-results/TEST-X.xml'), '<x/>');
   hook(out, 'post', call, cwd);
   assert.equal(existsSync(path.join(out, 'artifacts')), false);
+  const lines = readFileSync(path.join(out, 'hooks.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  assert.equal(lines[1].copied_test_results, null);
 });
 
 test('입력이 잘못돼도 표준 출력 없이 exit 0 으로 끝나고 오류만 따로 남긴다', () => {

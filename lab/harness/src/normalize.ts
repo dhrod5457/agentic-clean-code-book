@@ -173,10 +173,7 @@ function agentSummary(runDir: string, events: HarnessEvent[], run: RunJson, reac
   if (p === null && (!reachedRunning || stdout === null)) return null;
   const stream = summarizeStream(stdout ?? '');
   const ce = events.find((e): e is Extract<HarnessEvent, { type: 'container_exit' }> => e.type === 'container_exit' && e.role === 'agent') ?? null;
-  const container = ce === null ? null : {
-    found: ce.found, started: ce.started, exit_code: ce.exit_code, oom_killed: ce.oom_killed, error: ce.error,
-    running_after_client: ce.running_after_client, inspect_error: ce.inspect_error,
-  };
+  const container = ce === null ? null : (({ type: _t, at: _a, role: _r, name: _n, ...c }) => c)(ce);
   const cls = p === null ? null : classifyAgent(p, stream, readText(runDir, RAW.agentStderr) ?? '', container);
   const r = stream.result;
   const usage = (r?.usage ?? null) as Record<string, unknown> | null;

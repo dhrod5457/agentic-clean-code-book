@@ -13,7 +13,7 @@
 | environment fingerprint | 구현. host 값(docker 실행이면 Docker Engine · Desktop 버전, VM kernel · CPU · 메모리 포함)과, Agent 와 같은 이미지의 별도 컨테이너에서 측정한 도구 버전 |
 | `lab/grading/run.sh` 호출(판정 · 진단 묶음) | 구현 |
 | 재실행(새 attempt) | 구현 |
-| 컨테이너 실행(`runtime: docker`), 실행 이미지와 egress 제한(`image/`), 연결 경로, OOM · Docker 오류 · 외부 원인 종료 판정, 컨테이너별 `docker events` 기록, 채점 컨테이너 | 구현 |
+| 컨테이너 실행(`runtime: docker`), 실행 이미지와 egress 제한(`image/`), 연결 경로, OOM · Docker 오류 · 외부 원인 종료 판정(VM boot id 비교 포함), 컨테이너 실행 전부터 받는 `docker events` 기록, 채점 컨테이너 | 구현 |
 | 기록용 hook(`config/cc/`, 실행 조건 hash 포함), 재채점(`regradeRun`), 실행 명령(`src/cli.ts`), 내보내기(`export.sh`) | 구현 |
 | 의존성 offline cache 와 `GRADLE_USER_HOME` 준비, harness 강제 종료 시 컨테이너 정리 | 미구현. 체크리스트 7단계 · 이후 |
 
@@ -36,7 +36,7 @@
 | `src/run.ts` | 실행 1개 orchestration(`executeRun`), 실험 잠금, 재실행(`executeWithRetry`. 결측 표시, 구독 사용 한도 도달 시 멈춤), 재채점(`regradeRun`) |
 | `src/docker.ts` | Agent · 채점 컨테이너 실행 인자, 종료 뒤 컨테이너 정리와 상태(`settleContainer`), 이미지 안 도구 버전 확인 |
 | `src/cli.ts` | 실행 명령(`run`, `regrade`, `rebuild-result`). 인자 확인, token 파일 읽기, `caffeinate` |
-| `config/cc/settings.json`, `config/cc/record.mjs` | 기록용 hook. 도구 호출 전후(실패 포함) 기록과 시험 결과 파일 복사(설계 §14.3) |
+| `config/cc/settings.json`, `config/cc/record.mjs` | 기록용 hook. 도구 호출 전후(실패 포함) 기록과, Bash 명령마다 그 명령 중에 바뀐 시험 결과 파일 복사(설계 §14.3) |
 | `image/Dockerfile`, `image/start.sh` | 실행 이미지. 시작 스크립트가 외부 통신을 DNS resolver 와 `api.anthropic.com` 443 으로 제한하고 agent 사용자로 권한을 낮춘다. 제한을 설정하지 못하면 exit 90 |
 | `image.lock` | 실험에 쓰는 이미지 id, build 입력 sha256, `docker save` 사본 위치와 sha256 |
 | `export.sh` | 실행용 저장소 내보내기(설계 §15.1) |
@@ -53,7 +53,7 @@
 
 어느 단계든 harness · 환경 문제면 `harness_failed` 와 실패 단계(`prepare`, `agent_start`, `agent`, `after_agent`)를 기록한다. 상태가 바뀔 때마다 `result.json` 을 다시 만든다.
 
-재채점(`regrade`)은 실패 단계가 `after_agent` 인 실행(비종료 상태로 남은 실행 포함)에서 판정 결과가 없는 묶음만 다시 채점한다. 새 attempt 대상(API 오류, 사용 한도)은 거부한다. 집계 실험은 `lab/` 미commit 변경이 있으면 거부하고, 회차마다 harness 코드 상태를 `harness_code`(`regrade-<회차>`)로 남긴다.
+재채점(`regrade`)은 실패 단계가 `after_agent` 인 실행(비종료 상태로 남은 실행 포함)에서 판정 결과가 없는 묶음만 다시 채점한다. 새 attempt 대상(API 오류, 사용 한도)과 그 실행의 컨테이너가 남아 있는 실행은 거부한다. 비어 있는 Agent 기록은 `container/` 에서 복구한다. 집계 실험은 `lab/` 미commit 변경이 있으면 거부하고, 회차마다 harness 코드 상태를 `harness_code`(`regrade-<회차>`)로 남긴다.
 
 ## 실행
 

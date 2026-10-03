@@ -263,13 +263,14 @@ test('clone 한 작업 디렉터리에 지침 파일(하위 디렉터리 포함)
   const f = fixture(AGENT_OK);
   const git = (...a: string[]) => execFileSync('git', ['-C', f.source.repo, ...a], { encoding: 'utf8' }).trim();
   mkdirSync(path.join(f.source.repo, 'backend'));
-  writeFileSync(path.join(f.source.repo, 'backend/CLAUDE.md'), 'rules\n');
+  // macOS 의 bind mount 는 대소문자를 구분하지 않아 claude.md 도 컨테이너 안에서 CLAUDE.md 로 열린다
+  writeFileSync(path.join(f.source.repo, 'backend/claude.md'), 'rules\n');
   git('add', '-A');
   git('-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '--quiet', '-m', 'guide', '--', 'backend');
   const { result } = await executeRun(f.spec({ source: { repo: f.source.repo, commit: git('rev-parse', 'HEAD') } }), f.opts);
   assert.equal(result.state, 'harness_failed');
   assert.equal(result.harness_failure.stage, 'prepare');
-  assert.match(result.harness_failure.reason, /backend\/CLAUDE\.md/);
+  assert.match(result.harness_failure.reason, /backend\/claude\.md/);
   assert.equal(existsSync(f.argvFile), false, 'Agent 가 실행되면 안 된다');
 });
 

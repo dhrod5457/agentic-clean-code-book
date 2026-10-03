@@ -71,7 +71,7 @@ test('재실행 판단: API 오류를 먼저 보고, 비종료 상태는 마지�
 
 // docker inspect 로 얻은 컨테이너 종료 상태. 기본값은 정상 시작 · 종료한 컨테이너
 const container = (over: Partial<ContainerExit> = {}): ContainerExit => ({
-  found: true, started: true, exit_code: 1, oom_killed: false, error: '', running_after_client: false, inspect_error: null, ...over,
+  found: true, started: true, exit_code: 1, oom_killed: false, error: '', running_after_client: false, inspect_error: null, vm_restarted: false, ...over,
 });
 
 test('시작 스크립트가 실패해(exit 90, stdout 없음) Agent 를 실행하지 못한 컨테이너는 harness_failed(agent_start) 다', () => {
@@ -84,8 +84,9 @@ test('컨테이너 OOM 기록이 있어도 사용 한도 · API 오류로 끝난
   const oom = container({ oom_killed: true });
   assert.deepEqual(classifyAgent(exited(1), stream({ subtype: 'success', is_error: true, result: "You've hit your session limit · resets 3:45pm" }), '', oom), { state: 'agent_failed', error_kind: 'usage_limit' });
   assert.deepEqual(classifyAgent(exited(1), stream({ subtype: 'success', is_error: true, api_error_status: 529 }), '', oom), { state: 'agent_failed', error_kind: 'api_error' });
-  // 구조화된 오류가 없으면 OOM 이다
+  // 구조화된 오류가 없으면 OOM 이다. stderr 의 API Error 줄은 오류 result 가 아니므로 OOM 보다 먼저 보지 않는다
   assert.deepEqual(classifyAgent(exited(137), summarizeStream(''), '', container({ exit_code: 137, oom_killed: true })), { state: 'agent_failed', error_kind: 'oom' });
+  assert.deepEqual(classifyAgent(exited(137), summarizeStream(''), 'API Error: 529 overloaded\n', container({ exit_code: 137, oom_killed: true })), { state: 'agent_failed', error_kind: 'oom' });
 });
 
 test('시간 초과가 아닌데 docker client 가 끝난 뒤 컨테이너가 실행 중이었으면 외부 원인으로 harness_failed(agent) 다', () => {
@@ -101,4 +102,11 @@ test('docker inspect 가 응답하지 않으면 harness_failed(agent), 컨테이
   assert.equal(unknown.state === 'harness_failed' && unknown.stage, 'agent');
   const createFailed = classifyAgent(exited(127), summarizeStream(''), '', container({ started: false, exit_code: 127, error: 'OCI runtime create failed' }));
   assert.equal(createFailed.state === 'harness_failed' && createFailed.stage, 'agent_start');
+});
+
+test('Agent 실행 전후로 Docker VM 의 boot id 가 바뀌었으면 종료 형태와 관계없이 harness_failed(agent) 다', () => {
+  for (const [p, s] of [[exited(255), summarizeStream('')], [{ ...exited(137), timed_out: true }, summarizeStream('')]] as const) {
+    const cls = classifyAgent(p, s, '', container({ exit_code: p.exit_code, vm_restarted: true }));
+    assert.equal(cls.state === 'harness_failed' && cls.stage, 'agent', JSON.stringify(cls));
+  }
 });

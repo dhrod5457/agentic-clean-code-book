@@ -4,8 +4,8 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, write
 import path from 'node:path';
 import { before, test } from 'node:test';
 import type { ExecConfig } from '../src/config.ts';
-import { settleContainer } from '../src/docker.ts';
-import { executeRun } from '../src/run.ts';
+import { settleContainer, watchContainer } from '../src/docker.ts';
+import { executeRun, regradeRun } from '../src/run.ts';
 import { fixture, tmp, writeScript } from './helpers.ts';
 
 // 실제 실행 이미지(image.lock) 위에 가짜 claude 만 더한 이미지로 컨테이너 실행 경로를 시험한다. Docker 가 없으면 건너뛴다
@@ -108,6 +108,8 @@ test('컨테이너 안 Agent 는 권한 없는 agent 로 실행되고, 실험 �
     assert.equal(readFileSync(path.join(runDir, 'raw/grading/exp1/0-1/workspace'), 'utf8').trim(), '/work/shop-admin');
     assert.doesNotMatch(readFileSync(path.join(runDir, 'raw/agent/invocation.json'), 'utf8'), /oauth-test|sk-ant/);
     assert.ok(containerGone(`r-${runId}`));
+    // Agent 컨테이너의 events 는 생성부터 남는다
+    assert.match(readFileSync(path.join(runDir, 'raw/agent/docker-events.jsonl'), 'utf8'), /"Action":"create"/);
   } finally {
     delete process.env.ANTHROPIC_API_KEY;
   }
@@ -162,16 +164,42 @@ test('채점 컨테이너가 run.sh 를 시작하지 못하면 묶음 판정 없
 
 test('docker client 가 끝난 뒤에도 실행 중인 컨테이너는 끝내고 그 사실을 남기며, 없는 컨테이너는 found:false 다', { skip: !dockerReady }, async () => {
   const name = `settle-${process.pid}`;
+  const events = path.join(tmp('events-'), 'docker-events.jsonl');
+  const watch = await watchContainer(name, testImage, events);
   const client = spawn('docker', ['run', '--name', name, '--entrypoint', '', testImage, 'sleep', '120'], { stdio: 'ignore' });
   for (let i = 0; i < 50 && spawnSync('docker', ['inspect', '-f', '{{.State.Running}}', name], { encoding: 'utf8' }).stdout.trim() !== 'true'; i++) await new Promise((r) => setTimeout(r, 200));
   client.kill('SIGKILL');
   await new Promise((r) => client.once('exit', r));
-  const events = path.join(tmp('events-'), 'docker-events.jsonl');
-  const state = await settleContainer(name, new Date(Date.now() - 60_000).toISOString(), events);
+  const state = await settleContainer(name, watch);
   assert.equal(state.running_after_client, true);
   assert.equal(state.exit_code, 137);
-  assert.match(readFileSync(events, 'utf8'), /"die"/);
+  assert.equal(state.vm_restarted, false);
+  // 컨테이너가 만들어지기 전부터 받은 기록이라 생성부터 삭제까지 남는다
+  const actions = readFileSync(events, 'utf8').trim().split('\n').map((l) => JSON.parse(l).Action);
+  for (const a of ['create', 'start', 'die', 'destroy']) assert.ok(actions.includes(a), `${a}: ${actions.join(',')}`);
   assert.ok(containerGone(name));
-  const missing = await settleContainer(name, new Date().toISOString(), events);
+  const missing = await settleContainer(name, await watchContainer(name, testImage, path.join(tmp('events-'), 'none.jsonl')));
   assert.deepEqual([missing.found, missing.inspect_error], [false, null]);
+});
+
+test('재채점은 그 실행의 컨테이너가 남아 있으면 거부하고, 비어 있는 Agent 기록은 container/ 에서 복구한다', { skip: !dockerReady }, async () => {
+  const f = containerFixture('다음 요청을 처리해 줘.\n');
+  const script = readFileSync(f.config.grading.run_script, 'utf8');
+  rmSync(f.config.grading.run_script);
+  const { runId, runDir, result } = await executeRun(f.spec(), f.opts);
+  assert.equal(result.harness_failure.stage, 'after_agent');
+  writeFileSync(f.config.grading.run_script, script, { mode: 0o755 });
+  // 기록 복사가 실패한 실행처럼 raw/agent 의 세션 기록을 비운다
+  rmSync(path.join(runDir, 'raw/agent/claude-config'), { recursive: true });
+  mkdirSync(path.join(runDir, 'raw/agent/claude-config'));
+  const leftover = `g-${runId}-exp1-0-1`;
+  execFileSync('docker', ['create', '--name', leftover, '--entrypoint', '', testImage, 'true']);
+  try {
+    await assert.rejects(regradeRun(runDir, { labRoot: f.opts.labRoot }), /컨테이너가 남아 있다/);
+  } finally {
+    execFileSync('docker', ['rm', '-f', leftover]);
+  }
+  const { result: regraded } = await regradeRun(runDir, { labRoot: f.opts.labRoot });
+  assert.equal(regraded.grading.outcome, 'passed');
+  assert.equal(existsSync(path.join(runDir, 'raw/agent/claude-config/fake-uid')), true);
 });

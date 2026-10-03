@@ -59,7 +59,7 @@ A 와 B 의 실행은 아래 값이 모두 같다. "강제" 열은 harness 가 �
 | effort | `--effort medium` | 실행 설정 파일, 실험 잠금 |
 | 예산 한도 | `--max-budget-usd 15` | 실행 설정 파일, 실험 잠금 |
 | system prompt | CLI 기본값. `--system-prompt`, `--append-system-prompt`, output style 을 쓰지 않는다 | 실행 인자 생성 코드에 해당 인자가 없다 |
-| 지침 파일 | 없음. 실행마다 빈 `CLAUDE_CONFIG_DIR`, 실행용 저장소에 `CLAUDE.md` · `AGENTS.md` · `.claude/` 없음 | 내보내기 검사(설계 §15.1) |
+| 지침 파일 | 없음. 실행마다 빈 `CLAUDE_CONFIG_DIR`, 실행용 저장소에 하위 디렉터리를 포함해 `CLAUDE.md` · `CLAUDE.local.md` · `AGENTS.md` · `.claude/` 없음(대소문자 무시) | 내보내기 검사(설계 §15.1)와 준비 단계 clone 직후 검사(§4.3) |
 | 도구 | 2.1.287 기본 도구 중 `WebSearch`, `WebFetch` 를 뺀 전부. `--disallowedTools WebSearch WebFetch` | 실행 설정 파일 |
 | 권한 | `--dangerously-skip-permissions`. non-root 컨테이너와 egress 제한 조건에서만 쓴다(설계 §15.3) | 컨테이너 실행 단계 |
 | MCP | `--strict-mcp-config --mcp-config '{"mcpServers":{}}'` | 실행 인자 생성 코드 |
@@ -76,7 +76,7 @@ Agent 환경 변수 허용 목록:
 - 고정 값: `TZ=Asia/Seoul`, `LANG=ko_KR.UTF-8`, `DISABLE_AUTOUPDATER=1`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, subagent 모델 2개, `CLAUDE_CONFIG_DIR`
 - 컨테이너 단계에서 더하는 값: `GRADLE_USER_HOME`, `GRADLE_RO_DEP_CACHE`, `PLAYWRIGHT_BROWSERS_PATH`(설계 §15.2)
 - 실행자 쪽에서 넘기는 값: `CLAUDE_CODE_OAUTH_TOKEN` 뿐이다. harness 가 token 파일에서 읽는다(§4.4). `ANTHROPIC_API_KEY` 는 넘기지 않는다
-- `PATH` 와 `HOME=/home/agent` 는 이미지 값을 쓴다. 3단계 host 골격만 실행자의 `PATH` · `HOME` 을 넘긴다
+- `PATH` 는 이미지 값을 쓴다. 이미지에는 `HOME` 이 없으므로(root 로 시작하면 `/root`) harness 가 `HOME=/home/agent` 를 고정 값으로 넘긴다. 3단계 host 골격(`runtime: local`)만 실행자의 `PATH` · `HOME` 을 넘긴다
 - 이미지 ENV 도 Agent 에 들어간다: `PATH`, `JAVA_HOME=/opt/java/openjdk`, `JAVA_VERSION`, `LANG=ko_KR.UTF-8`, `LANGUAGE=en_US:en`, `LC_ALL=ko_KR.UTF-8`, `TZ=Asia/Seoul`, `DEBIAN_FRONTEND=noninteractive`, `PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright`. 이미지 id 가 실행 조건 hash 에 들어가므로 두 Variant 에 같다
 
 `WebSearch` · `WebFetch` 를 빼는 이유: 이 연구 저장소는 GitHub 에 공개돼 있고(`dhrod5457/agentic-clean-code-book`, PUBLIC) 설계와 숨김 채점이 들어 있다. `WebSearch` 는 Anthropic 서버에서 실행되므로 컨테이너 egress 제한으로 막히지 않는다. 두 Variant 에 같게 적용한다.
@@ -95,6 +95,7 @@ Agent 환경 변수 허용 목록:
 
 - 사내 Linux 노드(`vm94` 등)는 다른 세션의 시험 실행과 공유된다. 실행 중 부하가 시간 지표를 바꾸고 노드 잠금 경쟁이 생긴다
 - 이 Mac 은 개인 작업 기계라 같은 위험이 있다. 실험 1 · 3 실행 중에는 다른 Docker 작업을 하지 않고, 실행 시작 시 host load average 를 fingerprint 에 기록한다. 이 위험은 설계 §17 에 적었다
+- "다른 Docker 작업" 에는 상주 컨테이너도 들어간다. 2026-10-03 에 이 Mac 에서 healthcheck 가 있는 상주 컨테이너(`lotecs-keycloak-db`)가 5초마다 실행되고 있었다. 실험 1 · 3 실행 전에 상주 컨테이너를 멈추고, 실행 시작 시 실행 중인 컨테이너 이름 목록을 fingerprint 에 기록한다(§9.1)
 - 실험 기간에는 Docker Desktop 자동 갱신을 끄고, harness 를 `caffeinate -i` 아래에서 실행해 잠자기를 막는다
 - CPU 아키텍처는 `arm64` 다. 실험 3 기준 screenshot 은 같은 이미지에서 만든다(체크리스트 7단계)
 
@@ -130,7 +131,7 @@ Gradle 읽기 전용 cache(`GRADLE_RO_DEP_CACHE`)와 Playwright 브라우저는 
 - 컨테이너 이름과 hostname 은 `r-<run_id>` 다. 이미지 · 설정 · hook 파일 이름 · 경로 · 내용(주석 포함)에 실험 · Variant 를 나타내는 문자열을 쓰지 않는다
 - 3단계 컨테이너 항목의 완료 조건으로, 컨테이너 안에서 환경 변수 · 연결 경로 · hostname · `/opt/cc/` 파일 내용에 `agentic`, `variant`, `실험`, `experiment`, Variant 코드가 없는지 검사한다
 - 실행 설정의 `environment.runtime` 이 `docker` 일 때만 실제 Agent 를 실행한다. `local` 은 컨테이너 없이 host 에서 가짜 Agent 로 orchestration 을 시험할 때만 쓴다. `local` 에서는 작업 디렉터리에서 실행 디렉터리를 읽을 수 있기 때문이다
-- 내보내기(설계 §15.1)와 준비 단계의 clone 직후에 하위 디렉터리를 포함해 `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `.claude/` 가 없는지 확인한다. clone 직후 검사에 걸리면 `harness_failed(prepare)` 다. 내보내기는 파일 내용(binary 포함)과 경로 이름에서 금지 문자열도 검사한다
+- 내보내기(설계 §15.1)와 준비 단계의 clone 직후에 하위 디렉터리를 포함해 `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `.claude/` 가 없는지 대소문자 없이 확인한다. macOS 의 bind mount 는 대소문자를 구분하지 않아 `claude.md` 도 컨테이너 안에서 `CLAUDE.md` 로 열린다(2026-10-03 확인). clone 직후 검사에 걸리면 `harness_failed(prepare)` 다. 내보내기는 파일 내용(binary 포함)과 경로 이름에서 금지 문자열도 검사한다
 
 ## 4.4 인증
 
@@ -233,10 +234,10 @@ USD 예산 대신 구독 사용 한도 안에서 실행한다. 아래 세션 수
 | Agent exit 0, `result` 성공 | `agent_succeeded` | `result` 줄이 없으면 exit code 로만 판정하고 `result_missing` 을 기록 |
 | Agent exit ≠ 0 또는 오류 `result` | `agent_failed` | `error_kind`: `budget_exceeded`, `api_error`, `usage_limit`, `other` |
 | 구독 사용 한도 도달로 중단. 오류 result 의 `result` 문구나 stderr 줄이 `You've hit your <종류> limit` 으로 시작 | `agent_failed` | `error_kind = usage_limit`. Agent 관찰이 아니다. 한도가 풀린 뒤 같은 반복을 새 attempt 로 이어서 실행한다(§7) |
-| Agent 가 비정상 종료했고 `docker inspect` 의 `State.OOMKilled` 가 참. 이 값은 컨테이너 안 어느 process(Agent 의 Bash 가 실행한 gradle 같은 자식 포함)가 메모리 제한으로 죽어도 참이 된다. Agent 가 exit 0 이면 이 행을 쓰지 않는다. 오류 result 가 `usage_limit` · `api_error` · `budget_exceeded` 로 판정되면 그 분류를 먼저 쓴다 | `agent_failed` | `error_kind = oom`. 메모리 제한은 실행 조건이므로 관찰 결과다 |
-| 외부 원인 근거가 있는 종료. 근거는 셋뿐이다: harness 시간 초과가 아닌데 docker client 가 끝난 뒤에도 컨테이너가 실행 중이었음, `docker inspect` 에 Docker 가 3번 모두 답하지 않음("없는 컨테이너" 응답은 제외), 잠자기 감지 | `harness_failed` | `agent` |
+| Agent 가 비정상 종료했고 `docker inspect` 의 `State.OOMKilled` 가 참. 이 값은 컨테이너 안 어느 process(Agent 의 Bash 가 실행한 gradle 같은 자식 포함)가 메모리 제한으로 죽어도 참이 된다. Agent 가 exit 0 이면 이 행을 쓰지 않는다. 오류 result(`is_error` 인 마지막 `result`)가 `usage_limit` · `api_error` · `budget_exceeded` 로 판정되면 그 분류를 먼저 쓴다. stderr 줄의 한도 · API 오류 문구는 이 행 뒤에 본다 | `agent_failed` | `error_kind = oom`. 메모리 제한은 실행 조건이므로 관찰 결과다 |
+| 외부 원인 근거가 있는 종료. 근거는 넷뿐이다: harness 시간 초과가 아닌데 docker client 가 끝난 뒤에도 컨테이너가 실행 중이었음, `docker inspect` 에 Docker 가 3번 모두 답하지 않음("없는 컨테이너" 응답은 제외), 컨테이너 실행 전후로 Docker VM 의 boot id(`/proc/sys/kernel/random/boot_id`)가 바뀜(VM 재시작, 시간 초과보다 먼저 판정), 잠자기 감지 | `harness_failed` | `agent` |
 | harness 가 보내지 않은 signal 로 종료했고 외부 원인 근거가 없음 | `agent_failed` | `error_kind = signal`. Agent 가 Bash 로 보낸 signal 일 수 있어 관찰 결과로 본다. 마지막 Bash 명령을 함께 기록 |
-| 컨테이너 기록 | 상태에 영향 없음 | Agent · 채점 컨테이너마다 `docker inspect` 종료 상태(`container_exit`)와 그 컨테이너의 `docker events`(die · oom · kill 등)를 원본에 남긴다. Docker Desktop VM 재시작은 위 세 근거로 잡히지 않을 수 있다. VM 재시작은 자동 갱신을 끄는 것으로 막고(§4.1), §7 의 `other` · `signal` 확인 때 이 기록과 Docker Desktop 로그를 함께 본다 |
+| 컨테이너 기록 | 상태에 영향 없음 | Agent · 채점 컨테이너마다 `docker inspect` 종료 상태(`container_exit`, VM boot id 비교 포함)와 그 컨테이너의 `docker events`(create · start · die · oom · kill · destroy 등)를 원본에 남긴다. events 는 컨테이너 실행 전에 받기 시작한다. 끝난 뒤 조회하면 daemon 이 보관하는 최근 256건에서 잘리기 때문이다(2026-10-03 확인). boot id 를 읽지 못하면 VM 재시작 여부는 `null` 로 남고 판정에 쓰지 않는다. §7 의 `other` · `signal` 확인 때 이 기록과 Docker Desktop 로그를 함께 본다 |
 | 잠자기 감지: 한 단계의 wall 시각 경과와 monotonic 경과의 차이가 60초 초과 | `harness_failed` | 준비는 `prepare`, Agent 는 `agent`, diff · 채점 · 정리는 `after_agent` |
 | 45분 초과 | `timed_out` | harness 가 종료한 경우만 |
 | 최종 diff 생성 실패, Agent 종료 뒤 세션 · hook 기록 복사 실패 | `harness_failed` | `after_agent`. 복사는 Agent 종료 기록(`agent_process`)과 분류 뒤에 한다. Agent 종료가 harness 원인으로 분류됐으면 그 `stage` 를 쓴다 |
@@ -245,7 +246,7 @@ USD 예산 대신 구독 사용 한도 안에서 실행한다. 아래 세션 수
 | 판정 묶음 exit ≠ 0 이고 JUnit 이 없거나, 읽을 수 없거나, 시험이 0개 | 묶음 `error` | Variant build 실패 · 애플리케이션 시작 실패. Agent 변경이 원인일 수 있어 채점 실패로 본다 |
 | 판정 묶음 exit 0 인데 JUnit 이 없거나 시험이 0개 | 묶음 `error` | |
 | 판정 묶음 30분 초과 | 같은 산출물로 그 묶음을 1회 다시 실행하고, 다시 초과하면 묶음 `timed_out` | 채점 실패로 본다. 기준 commit 은 시간 안에 채점되는 것을 실험 전에 확인하므로, 반복 초과는 Agent 변경(build 정지 같은)이 원인일 가능성이 높다. 같은 산출물을 다시 보는 것이라 Agent 결과를 다시 뽑지 않는다 |
-| 판정 채점 port 사전 확인 실패, `run.sh` 시작 실패(채점 컨테이너가 없거나 `State.Error` 가 있거나 시작 시각이 없음), harness 시간 초과가 아닌데 `run.sh` 가 exit 130(INT · TERM trap)이나 signal 로 끝남 또는 docker client 가 끝난 뒤 채점 컨테이너가 실행 중이었음(외부 중단), 채점 컨테이너 `docker inspect` 무응답, Agent 실행 중 harness 저장소의 commit · `lab/` 변경이 바뀜 | `harness_failed` | `after_agent`. 채점이 결과를 내지 못했다. docker client 의 exit 125 · 126 · 127 은 `run.sh` 자신의 종료 코드와 구분되지 않으므로 종료 코드가 아니라 컨테이너 상태로 판단한다 |
+| 판정 채점 port 사전 확인 실패, `run.sh` 시작 실패(채점 컨테이너가 없거나 `State.Error` 가 있거나 시작 시각이 없음), harness 시간 초과가 아닌데 `run.sh` 가 exit 130(INT · TERM trap)이나 signal 로 끝남 또는 docker client 가 끝난 뒤 채점 컨테이너가 실행 중이었음(외부 중단), 채점 컨테이너 `docker inspect` 무응답, 채점 중 Docker VM boot id 변경, Agent 실행 중 harness 저장소의 commit · `lab/` 변경이 바뀜 | `harness_failed` | `after_agent`. 채점이 결과를 내지 못했다. docker client 의 exit 125 · 126 · 127 은 `run.sh` 자신의 종료 코드와 구분되지 않으므로 종료 코드가 아니라 컨테이너 상태로 판단한다 |
 | `run.sh` 가 exit 137 · 143 으로 끝남 | 묶음 `error` | `set -e` 인 `run.sh` 에서 build 자식(gradlew, pnpm)이 signal 로 죽은 경우다. 메모리 제한 안의 build 실패처럼 Agent 변경이 원인일 수 있어 채점 실패로 본다 |
 | 판정 묶음의 판정 기록 | harness 가 묶음 판정을 정한 경우에만 남긴다 | 판정 기록이 없는 묶음은 결과 없음(채점 결측)이다. 판정 묶음 중 하나라도 결과가 없으면 `grading.outcome` 은 정하지 않는다 |
 | 진단 묶음의 결과와 진단 단계의 모든 예외 | 상태에 영향 없음 | `result.json` 의 `grading.diagnostic` 에 기록만 한다 |
@@ -295,9 +296,11 @@ USD 예산 대신 구독 사용 한도 안에서 실행한다. 아래 세션 수
 - 반복 번호당 최대 3 attempt. 3번 모두 재실행 대상으로 끝나면 그 반복을 결측(`missing`)으로 기록하고 반복을 더하지 않는다. 결측 반복의 마지막 attempt 는 분석 데이터로 쓰지 않는다
 - `usage_limit` 로 끝난 attempt 는 3회 상한에 세지 않는다. harness 는 그 자리에서 멈추고, 일정 실행 단계가 한도 초기화 시각 뒤 같은 반복을 이어서 실행한다. 이어서 실행할 때 그 반복에서 이미 상한에 센 attempt 수를 harness 에 넘긴다. 주간 한도에 걸리면 며칠을 기다릴 수 있다
 - 실험이 끝날 때까지 이어서 실행하지 못해 마지막 attempt 가 `usage_limit` 인 반복은 결측이다
-- 분석 전에 `error_kind = other` 로 끝난 모든 실행의 result 문구와 stderr 를 사람이 확인해, 한도 · API 오류가 Agent 관찰로 잘못 분류된 실행이 없는지 본다
+- 분석 전에 `error_kind = other` · `signal` 로 끝난 모든 실행의 result 문구, stderr, 마지막 Bash 명령, 컨테이너 기록(`container_exit`, `docker-events.jsonl`)과 그 시각의 Docker Desktop 로그를 사람이 확인해, 한도 · API 오류나 외부 원인 종료가 Agent 관찰로 잘못 분류된 실행이 없는지 본다
+- 확인에서 한도 · API 오류나 외부 원인(Docker daemon · VM 재시작, host 종료 등)의 근거를 찾으면 그 실행을 재분류한다. 근거와 판단을 실험 기록에 남기고, 그 attempt 를 `api_error` · `usage_limit` 이면 그 분류로, 외부 원인이면 `harness_failed(agent)` 로 보고 같은 반복을 새 attempt 로 이어서 실행한다(실행 명령의 이어서 실행 인자). 원본과 `result.json` 은 고치지 않는다. 근거가 없으면 Agent 관찰로 둔다. 실험이 끝난 뒤 찾은 경우는 이어서 실행하지 못하므로 그 반복을 결측으로 기록한다
 - 재채점은 Agent 관찰을 바꾸지 않으므로 attempt 를 늘리지 않는다. 재채점 결과는 원래 실행 디렉터리 안에 따로 기록한다. 재채점 기능은 pilot 전에 구현한다(체크리스트 3단계)
 - 재채점 대상 실행: 위 판정 순서로 새 attempt 대상이 아니고, 실패 단계가 `after_agent` 인 실행이다. `harness_failed(after_agent)` 와, harness 가 강제 종료돼 §6.2 규칙으로 `after_agent` 가 된 비종료 상태 실행을 모두 포함한다. `api_error` · `usage_limit` 실행은 새 attempt 대상이므로 재채점하지 않는다
+- 재채점 전에 그 실행 ID 가 이름에 들어간 컨테이너가 남아 있으면 거부한다. harness 가 아직 실행 중이거나 정리하지 못한 실행을 두 번 채점하지 않기 위해서다. Agent 기록(`raw/agent/claude-config`, `raw/agent/hooks`)이 비어 있으면 컨테이너에 연결했던 `container/` 의 원본에서 복구하고 기록에 남긴다
 - 재채점 대상은 결과가 기록되지 않은 판정 묶음이다. 이미 결과가 기록된 판정 묶음은 그 뒤에 harness 예외가 나도 기록된 결과를 쓴다
 - 재채점에도 §8.3 의 harness 코드 규칙을 쓴다. 집계 실험은 `lab/` 에 미commit 변경이 있으면 재채점을 시작하지 않는다. 회차마다 harness 코드 상태를 `harness_code`(`when = regrade-<회차>`)로 남기고, pilot · 보정 실행의 미commit 변경은 `raw/harness-lab.diff.regrade-<회차>` 에 남긴다
 - 재채점도 첫 채점과 같이 source commit 을 새로 clone 하고 `final.patch` 를 적용한 복사본으로 한다(§6.2). `final.patch` 가 없으면(최종 diff 생성 실패) 보존된 작업 디렉터리에서 diff 를 먼저 다시 만든다
@@ -340,6 +343,7 @@ USD 예산 대신 구독 사용 한도 안에서 실행한다. 아래 세션 수
 ```
 <결과 root>/
   experiments/<experiment>/             실험 잠금(§8.3). condition, task-<과제>, source-<variant>, grading-code 키별 파일
+  images/                               실행 이미지의 docker save 사본(§4.5)
   runs/<run_id>/
     run.json                             실행 설정. 준비 단계에서 한 번 쓰고 바꾸지 않는다
     result.json                          정규화 결과. run.json, raw/, artifacts/ 에서 다시 만들 수 있다
@@ -414,7 +418,7 @@ USD 예산 대신 구독 사용 한도 안에서 실행한다. 아래 세션 수
 
 ## 9.1 environment fingerprint
 
-host(harness 를 실행한 기계): OS 종류와 release, CPU 아키텍처, 익명 machine id(hostname 의 sha256 앞 12자리), load average(1분), harness 의 Node.js 버전. `docker` 실행이면 Docker Desktop · Engine 버전과 VM 의 kernel · OS · CPU 수 · 메모리.
+host(harness 를 실행한 기계): OS 종류와 release, CPU 아키텍처, 익명 machine id(hostname 의 sha256 앞 12자리), load average(1분), harness 의 Node.js 버전. `docker` 실행이면 Docker Desktop · Engine 버전, VM 의 kernel · OS · CPU 수 · 메모리, 준비 단계 시점에 실행 중인 컨테이너 이름 목록.
 harness: 저장소 commit SHA, `lab/` 미commit 변경 여부.
 Agent 환경: Java · Node.js · pnpm · Claude Code 버전(명령 출력 원문과 추출 값).
 실행 설정: source commit SHA, 모델, effort.
@@ -459,6 +463,7 @@ Agent 환경 값은 `docker` 실행에서 Agent 와 같은 이미지의 별도 �
 | 2026-10-03 | 실행 이미지 build(`image.lock`, id `sha256:ea03f941…`)와 실행 설정 `environment.image` 기록, 컨테이너 시작 방식(root 로 egress 제한 후 agent 로 권한 낮춤) | 체크리스트 3단계 이미지 · egress 항목 |
 | 2026-10-03 | 컨테이너 실행 경로(연결 경로 · cc 사본 · 결과 root 경로 검사 · OOM · Docker 오류 판정), 채점 컨테이너, 기록용 hook, 재채점, 실행 명령, 내보내기 스크립트 | 체크리스트 3단계 나머지 항목 |
 | 2026-10-03 | 시작 스크립트 실패(exit 90) 분류와 DNS 를 resolver 로 한정(§4.2), hook 출력 위치 · 결과 root 실제 경로 · 채점 network 설정 · 지침 파일 검사(§4.3), 인증 확인 위치와 token 사전 확인(§4.4), image id 표기와 `docker save` 사본(§4.5), OOM 보다 구조화된 오류 우선, 외부 원인 근거 셋, 컨테이너 생성 · 시작 실패, 채점 컨테이너 시작 실패, 기록 복사 실패, 컨테이너 events 기록(§6.3), 재채점 대상과 harness 코드 규칙(§7), 이미지 ENV(§3), fingerprint 의 Docker 정보와 측정 위치(§9.1), pilot 확인 항목(§10) | 컨테이너 단계 독립 검토(§12 9차) |
+| 2026-10-03 | `docker events` 를 컨테이너 실행 전부터 받음, OOM 앞에 보는 근거를 오류 result 로 한정, VM boot id 변경을 외부 원인 근거로 추가, `other` · `signal` 사람 확인과 재분류 규칙(§7), 재채점 전 남은 컨테이너 거부와 Agent 기록 복구(§7), hook 이 명령 이름과 관계없이 새 시험 결과를 복사(설계 §14.3), 지침 파일 대소문자 무시(§3, §4.3), 상주 컨테이너 중지와 기록(§4.1, §9.1), `HOME` 문구(§3), `images/`(§8.2) | 컨테이너 단계 재확인(§12 10차) |
 
 ---
 

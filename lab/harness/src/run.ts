@@ -1,9 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { appendFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { agentEnv, classifyAgent, claudeArgs, containerAgentEnv, summarizeStream, type ContainerExit } from './agent.ts';
-import { agentRunArgs, CONTAINER, containerSettingsPath, envFlags, gradingRunArgs, imageProbe, settleContainer, type SettledContainer } from './docker.ts';
+import { agentRunArgs, CONTAINER, containerSettingsPath, envFlags, gradingRunArgs, imageProbe, settleContainer, containersOf, watchContainer, type SettledContainer } from './docker.ts';
 import {
   canonicalJson, conditionHash, FORBIDDEN, inputHash, LAB_ROOT, sha256, SpecError, validateSpec,
   type ExecConfig, type RunSpec, type TaskDef,
@@ -288,6 +288,7 @@ export async function executeRun(spec: RunSpec, opts: RunOptions): Promise<RunOu
       const env = agentEnv(config, path.join(runDir, RAW.agentConfig), process.env);
       launch = { cmd: config.agent.executable, args: agentArgs, env, cwd: workspace, agentArgs, envNames: Object.keys(env).sort() };
     }
+    const watch = inContainer ? await watchContainer(containerName, config.environment.image!, path.join(runDir, RAW.agentDockerEvents)) : null;
     // 기록에는 환경 변수 이름만 남긴다. docker 인자에도 값이 없다
     writeFileSync(path.join(runDir, RAW.agentInvocation), `${JSON.stringify({ runtime: config.environment.runtime, executable: config.agent.executable, args: launch.agentArgs, launcher: launch.cmd === 'docker' ? launch.args.slice(0, launch.args.length - launch.agentArgs.length) : null, env_names: launch.envNames }, null, 2)}\n`);
     const agent = await runProcess({
@@ -303,9 +304,9 @@ export async function executeRun(spec: RunSpec, opts: RunOptions): Promise<RunOu
       clock,
     });
     let containerExit: ContainerExit | null = null;
-    if (inContainer) {
+    if (watch !== null) {
       // docker client 가 끝난 뒤 남은 컨테이너(시간 초과 · 외부 중단)를 끝내고 종료 상태를 읽는다
-      containerExit = await settleContainer(containerName, agent.started_at, path.join(runDir, RAW.agentDockerEvents));
+      containerExit = await settleContainer(containerName, watch);
       ctx.event({ type: 'container_exit', at: ctx.now(), role: 'agent', name: containerName, ...containerExit });
     }
     ctx.event({ type: 'agent_process', ...agent });
@@ -373,6 +374,7 @@ function finish(runId: string, runDir: string, ctx: RunContext): RunOutcome {
 function gradingContainerProblem(c: SettledContainer | null, timedOut: boolean): string | null {
   if (c === null) return null;
   if (c.inspect_error !== null) return `docker inspect 에 Docker 가 답하지 않았다: ${c.inspect_error}`;
+  if (c.vm_restarted === true) return '채점 중 Docker VM 이 다시 시작됐다(boot id 변경)';
   if (!c.found || !c.started || c.error !== '') return `채점 컨테이너가 run.sh 를 시작하지 못했다: ${c.error}`;
   if (c.running_after_client && !timedOut) return 'docker client 가 끝났는데 채점 컨테이너가 실행 중이었다';
   return null;
@@ -432,6 +434,7 @@ class Grader {
       }
       launch = { cmd: script, args: gradingArgs(this.workspace, this.port, suite), env };
     }
+    const watch = name === null ? null : await watchContainer(name, this.config.environment.image!, path.join(logDir, 'docker-events.jsonl'));
     const p = await runProcess({
       cmd: launch.cmd,
       args: launch.args,
@@ -444,8 +447,8 @@ class Grader {
       clock: this.clock,
     });
     let container: SettledContainer | null = null;
-    if (name !== null) {
-      container = await settleContainer(name, p.started_at, path.join(logDir, 'docker-events.jsonl'));
+    if (name !== null && watch !== null) {
+      container = await settleContainer(name, watch);
       this.ctx.event({ type: 'container_exit', at: this.ctx.now(), role: 'grading', name, ...container });
     }
     this.lastTimedOut = p.timed_out;
@@ -575,6 +578,11 @@ export async function regradeRun(runDir: string, opts: { labRoot?: string; clock
   }
 
   const config = run.execution_config;
+  if (config.environment.runtime === 'docker') {
+    // 이 실행의 harness 가 아직 살아 있거나 정리하지 못한 컨테이너가 있으면 같은 묶음을 두 번 채점하게 된다
+    const left = await containersOf(run.run_id);
+    if (left.length > 0) throw new SpecError(`이 실행의 컨테이너가 남아 있다: ${left.join(', ')}`);
+  }
   const ctx = new RunContext(runDir, clock);
   ctx.state = before.state;
   ctx.stage = 'after_agent';
@@ -583,6 +591,17 @@ export async function regradeRun(runDir: string, opts: { labRoot?: string; clock
   if (changes !== '') writeFileSync(path.join(runDir, `${RAW.harnessDiff}.regrade-${round}`), labChangeRecord(labRoot, changes));
   const step = (logDir: string): StepOptions => ({ logDir: path.join(runDir, logDir), gitHome: path.join(runDir, HARNESS_HOME), timeoutMs: config.timeouts_ms.prepare, graceMs: config.timeouts_ms.grace, clock });
   const patch = path.join(runDir, ARTIFACTS.patch);
+  if (config.environment.runtime === 'docker') {
+    // Agent 종료 뒤 기록 복사 전에 실패한 실행은 raw/agent 가 비어 있다. 컨테이너에 연결했던 원본에서 복구한다
+    for (const [from, to] of [['container/claude-config', RAW.agentConfig], ['container/hooks-out', RAW.agentHooks]]) {
+      const src = path.join(runDir, from);
+      const dest = path.join(runDir, to);
+      if (existsSync(src) && (!existsSync(dest) || readdirSync(dest).length === 0)) {
+        cpSync(src, dest, { recursive: true });
+        ctx.event({ type: 'note', at: ctx.now(), message: `재채점 ${round} 회차: ${from} 를 ${to} 로 복구했다` });
+      }
+    }
+  }
   try {
     // 최종 diff 가 없으면(diff 생성 실패) 보존된 작업 디렉터리에서 먼저 다시 만든다
     if (!existsSync(patch)) {

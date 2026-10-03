@@ -58,15 +58,16 @@ export async function cloneAt(repo: string, commit: string, dest: string, o: Ste
   if (head !== commit) throw new StepError(`HEAD ${head} 가 source commit ${commit} 과 다르다`);
 }
 
-// Claude Code 가 읽는 지침 파일. 실행 계약 §3 "지침 파일 없음" 을 clone 직후에도 확인한다(내보내기 검사와 같은 이름)
-const GUIDANCE = new Set(['CLAUDE.md', 'CLAUDE.local.md', 'AGENTS.md', '.claude']);
+// Claude Code 가 읽는 지침 파일. 실행 계약 §3 "지침 파일 없음" 을 clone 직후에도 확인한다(내보내기 검사와 같은 이름).
+// macOS 의 bind mount 는 대소문자를 구분하지 않아 claude.md 도 컨테이너 안에서 CLAUDE.md 로 열리므로 소문자로 비교한다
+const GUIDANCE = new Set(['claude.md', 'claude.local.md', 'agents.md', '.claude']);
 
 export function guidanceFiles(dir: string, rel = ''): string[] {
   const found: string[] = [];
   for (const e of readdirSync(path.join(dir, rel), { withFileTypes: true })) {
     const p = rel === '' ? e.name : `${rel}/${e.name}`;
     if (p === '.git') continue;
-    if (GUIDANCE.has(e.name)) found.push(p);
+    if (GUIDANCE.has(e.name.toLowerCase())) found.push(p);
     else if (e.isDirectory()) found.push(...guidanceFiles(dir, p));
   }
   return found;

@@ -97,7 +97,7 @@ Variant 보다 먼저 쓴다. 과제 문구도 이 단계에서 먼저 고정한
 - [x] 컨테이너 연결 경로: workspace, 빈 `CLAUDE_CONFIG_DIR`, hook 출력, 읽기 전용 `/opt/cc/` 만 연결(실행 계약 §4.3)
   - 완료 조건: 컨테이너 안의 환경 변수 · 연결 경로 · hostname · `/opt/cc/` 파일 내용에 `agentic`, `variant`, `실험`, `experiment`, Variant 코드가 없다
 - [x] OOM · 외부 원인 종료 판정(`docker inspect`, `docker events`)과 재채점(`stage = after_agent` 실행을 source commit + `final.patch` 복사본으로 다시 채점, 최대 2회) (실행 계약 §6.3, §7)
-  - 결과(2026-10-03, 9차 검토 반영): 외부 원인 근거는 client 종료 뒤 실행 중 컨테이너 · inspect 무응답 · 잠자기 감지 셋이다. `docker events` 는 컨테이너마다 원본에 기록만 하고 판정에 쓰지 않는다. VM 재시작은 이 근거로 잡히지 않을 수 있어 자동 갱신 끄기로 막는다
+  - 결과(2026-10-03, 9차 · 10차 검토 반영): 외부 원인 근거는 client 종료 뒤 실행 중 컨테이너 · inspect 무응답 · VM boot id 변경 · 잠자기 감지 넷이다. `docker events` 는 컨테이너 실행 전부터 받아 원본에 기록만 하고 판정에 쓰지 않는다. 재채점은 그 실행의 컨테이너가 남아 있으면 거부한다
 
 - [x] 컨테이너 이미지: JDK, Node, pnpm, Playwright Chromium, 고정 글꼴, Claude Code 고정 버전, `TZ=Asia/Seoul`, `LANG=ko_KR.UTF-8`, non-root 사용자
   - 완료 조건: 이미지 digest 를 `lab/harness/image.lock` 에 기록
@@ -114,7 +114,7 @@ Variant 보다 먼저 쓴다. 과제 문구도 이 단계에서 먼저 고정한
   - 결과(2026-10-03): 실행 명령은 `lab/harness/src/cli.ts`(`pnpm lab run` · `regrade` · `rebuild-result`). 인자와 시간 제한은 계약대로 구현했다. `GRADLE_USER_HOME` · `wrapper/dists` 복사와 의존성 offline 설치는 7단계 cache 이미지와 함께 한다
   - 완료 조건: 실행마다 빈 `CLAUDE_CONFIG_DIR`, `--strict-mcp-config`, `--settings`(기록용 hook), `--dangerously-skip-permissions`(non-root 컨테이너와 egress 제한 조건에서만, 설계 §15.3), `--session-id`, `--output-format stream-json --verbose --include-hook-events`, `--model`, `--effort`, `--max-budget-usd`, 시간 제한 45분
   - 완료 조건: 실행마다 빈 `GRADLE_USER_HOME` 을 만들고 이미지의 `wrapper/dists` 를 복사한다. `GRADLE_RO_DEP_CACHE` 는 이미지 안 root 소유 경로를 가리킨다(설계 §15.2, 실행 계약 §4.3). cache 내용은 7단계에서 채운다
-- [x] 기록용 hook: `PreToolUse` · `PostToolUse` · `PostToolUseFailure` 입력에 기록 시각을 붙여 `hooks.jsonl` 에 추가. 시험 명령이면(실패 포함) 그 명령 시작 이후 수정된 시험 결과 파일만 작업 디렉터리 루트 기준으로 복사(설계 §14.3)
+- [x] 기록용 hook: `PreToolUse` · `PostToolUse` · `PostToolUseFailure` 입력에 기록 시각을 붙여 `hooks.jsonl` 에 추가. Bash 명령이 끝날 때마다(실패 포함) 그 명령 시작 이후 수정된 시험 결과 파일만 작업 디렉터리 루트 기준으로 복사(설계 §14.3)
   - 완료 조건: hook 이 표준 출력에 아무것도 쓰지 않고 항상 exit 0
 - [x] stream 수신 시각 기록: 원본 줄을 바꾸지 않고 줄마다 수신 시각을 별도 파일에 쓴다(실행 계약 §8.4)
 - [ ] 빈 저장소로 pilot 1회

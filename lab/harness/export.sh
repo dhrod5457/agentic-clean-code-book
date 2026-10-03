@@ -3,7 +3,7 @@
 # 사용: ./export.sh <Variant 디렉터리> <출력 상위 디렉터리>
 # <출력 상위 디렉터리>/shop-admin 에 작성용 저장소 HEAD 의 Variant 디렉터리 내용만 담은 새 git 저장소를 만든다. commit 은 1개다.
 # 검사: 금지 문자열(agentic, variant, 실험, experiment)이 파일 내용(binary 포함) · 경로 이름에 0건,
-#       하위 디렉터리를 포함해 CLAUDE.md · CLAUDE.local.md · AGENTS.md · .claude/ 없음, commit 1개.
+#       하위 디렉터리를 포함해 CLAUDE.md · CLAUDE.local.md · AGENTS.md · .claude/ 없음(대소문자 무시), commit 1개.
 # 성공하면 마지막 줄에 commit SHA 를 출력한다. 검사에 실패하면 출력 저장소를 지우고 exit 1 이다.
 set -euo pipefail
 
@@ -38,7 +38,8 @@ fail() {
 }
 
 FORBIDDEN='agentic|variant|실험|experiment'
-guides=$(cd "$OUT" && find . \( -name CLAUDE.md -o -name CLAUDE.local.md -o -name AGENTS.md -o -name .claude \) | sed 's|^\./||')
+# macOS 의 bind mount 는 대소문자를 구분하지 않으므로 이름을 대소문자 없이 비교한다
+guides=$(cd "$OUT" && find . \( -iname CLAUDE.md -o -iname CLAUDE.local.md -o -iname AGENTS.md -o -iname .claude \) | sed 's|^\./||')
 [ -z "$guides" ] || fail "지침 파일이 있다: $(echo "$guides" | tr '\n' ' ')"
 if names=$(cd "$OUT" && find . -mindepth 1 | sed 's|^\./||' | grep -iE "$FORBIDDEN"); then
   fail "금지 문자열이 있는 경로: $(echo "$names" | tr '\n' ' ')"

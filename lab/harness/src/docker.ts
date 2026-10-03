@@ -1,5 +1,5 @@
-import { execFile } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { execFile, spawn } from 'node:child_process';
+import { closeSync, openSync, readFileSync } from 'node:fs';
 import type { ExecConfig } from './config.ts';
 import type { Probe } from './fingerprint.ts';
 
@@ -120,11 +120,40 @@ export async function inspectContainer(name: string): Promise<ContainerState> {
 export interface SettledContainer extends Omit<ContainerState, 'running'> {
   // docker client 가 끝난 뒤에도 컨테이너가 실행 중이었는지. harness 시간 초과가 아니면 외부 원인이다
   running_after_client: boolean;
+  // 컨테이너 실행 전후로 Docker VM 의 boot id 가 바뀌었는지(VM 재시작). 어느 쪽이든 읽지 못하면 null
+  vm_restarted: boolean | null;
 }
 
-// docker client 가 끝난 뒤 컨테이너를 정리한다. 실행 중이면 끝내고 종료 코드를 기다린 뒤 상태를 읽는다.
-// since 부터 지금까지의 그 컨테이너 docker events 를 eventsPath 에 남기고 컨테이너를 지운다
-export async function settleContainer(name: string, since: string, eventsPath: string): Promise<SettledContainer> {
+// Docker VM 의 boot id. VM 이 다시 시작되면 바뀐다. 읽지 못하면 null
+async function vmBootId(image: string): Promise<string | null> {
+  const r = await docker(['run', '--rm', '--network', 'none', '--entrypoint', '', image, 'cat', '/proc/sys/kernel/random/boot_id']);
+  return r.code === 0 ? r.stdout.trim() : null;
+}
+
+export interface ContainerWatch {
+  image: string;
+  bootId: string | null;
+  eventsPath: string;
+  stop: () => void;
+}
+
+// 컨테이너를 실행하기 전에 부른다. VM boot id 를 읽고, 그 컨테이너의 docker events 를 받기 시작한다.
+// 끝난 뒤 --since 로 조회하면 daemon 이 보관하는 최근 기록(256건)에서 잘리므로 실행 내내 받는다
+export async function watchContainer(name: string, image: string, eventsPath: string): Promise<ContainerWatch> {
+  const bootId = await vmBootId(image);
+  const fd = openSync(eventsPath, 'a');
+  const p = spawn('docker', ['events', '--filter', `container=${name}`, '--format', '{{json .}}'], { stdio: ['ignore', fd, fd] });
+  closeSync(fd);
+  // 예외로 stop 을 부르지 못해도 harness process 가 끝날 수 있게 한다
+  p.unref();
+  // docker events 가 구독을 시작하기 전에 생긴 기록은 받지 못한다
+  await new Promise((r) => setTimeout(r, 500));
+  return { image, bootId, eventsPath, stop: () => p.kill() };
+}
+
+// docker client 가 끝난 뒤 컨테이너를 정리한다. 실행 중이면 끝내고 종료 코드를 기다린 뒤 상태를 읽고, 컨테이너를 지운다.
+// 지운 기록(destroy)이 events 에 들어오면(최대 3초) 받기를 멈추고 VM boot id 를 다시 읽는다
+export async function settleContainer(name: string, watch: ContainerWatch): Promise<SettledContainer> {
   let s = await inspectContainer(name);
   const runningAfterClient = s.running;
   if (runningAfterClient) {
@@ -132,11 +161,19 @@ export async function settleContainer(name: string, since: string, eventsPath: s
     await docker(['wait', name]);
     s = await inspectContainer(name);
   }
-  const events = await docker(['events', '--since', since, '--until', new Date().toISOString(), '--filter', `container=${name}`, '--format', '{{json .}}']);
-  writeFileSync(eventsPath, events.code === 0 ? events.stdout : `# docker events 실패(exit ${events.code}): ${events.stderr}`);
   await removeContainer(name);
+  for (let i = 0; i < 30 && s.found && !readFileSync(watch.eventsPath, 'utf8').includes('"Action":"destroy"'); i++) await new Promise((r) => setTimeout(r, 100));
+  watch.stop();
+  const bootAfter = await vmBootId(watch.image);
   const { running: _, ...rest } = s;
-  return { ...rest, running_after_client: runningAfterClient };
+  return { ...rest, running_after_client: runningAfterClient, vm_restarted: watch.bootId === null || bootAfter === null ? null : watch.bootId !== bootAfter };
+}
+
+// 실행 ID 가 이름에 들어 있는 컨테이너(Agent r-<run_id>, 채점 g-<run_id>-…). 재채점 전에 남은 것이 없는지 본다
+export async function containersOf(runId: string): Promise<string[]> {
+  const r = await docker(['ps', '-a', '--filter', `name=${runId}`, '--format', '{{.Names}}']);
+  if (r.code !== 0) throw new Error(`docker ps 실패: ${r.stderr.trim()}`);
+  return r.stdout.split('\n').filter((n) => n !== '');
 }
 
 export async function removeContainer(name: string): Promise<void> {

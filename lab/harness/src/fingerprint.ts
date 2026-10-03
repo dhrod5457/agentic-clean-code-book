@@ -57,8 +57,8 @@ export interface RawFingerprint {
     machine_id: string;
     load_avg_1m: number;
     node_version: string;
-    // docker 실행일 때 Docker Engine · Desktop 버전과 VM 의 kernel · CPU · 메모리. 읽지 못하면 오류 문구
-    docker: { desktop: string | null; engine: string; kernel: string; os: string; cpus: number; memory_bytes: number } | { error: string } | null;
+    // docker 실행일 때 Docker Engine · Desktop 버전, VM 의 kernel · CPU · 메모리, 이미 실행 중인 다른 컨테이너. 읽지 못하면 오류 문구
+    docker: { desktop: string | null; engine: string; kernel: string; os: string; cpus: number; memory_bytes: number; running_containers: string[] } | { error: string } | null;
   };
   harness: { commit: string | null; lab_dirty: boolean | null };
   agent_env: Record<Tool, ProbeResult & { argv: string[] }>;
@@ -69,7 +69,8 @@ function dockerHost(): RawFingerprint['host']['docker'] {
     const run = (args: string[]) => execFileSync('docker', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20_000 });
     const info = JSON.parse(run(['info', '--format', '{{json .}}'])) as { ServerVersion: string; KernelVersion: string; OperatingSystem: string; NCPU: number; MemTotal: number };
     const platform = JSON.parse(run(['version', '--format', '{{json .Server.Platform}}'])) as { Name?: string } | null;
-    return { desktop: platform?.Name ?? null, engine: info.ServerVersion, kernel: info.KernelVersion, os: info.OperatingSystem, cpus: info.NCPU, memory_bytes: info.MemTotal };
+    const running = run(['ps', '--format', '{{.Names}}']).split('\n').filter((n) => n !== '').sort();
+    return { desktop: platform?.Name ?? null, engine: info.ServerVersion, kernel: info.KernelVersion, os: info.OperatingSystem, cpus: info.NCPU, memory_bytes: info.MemTotal, running_containers: running };
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
   }
