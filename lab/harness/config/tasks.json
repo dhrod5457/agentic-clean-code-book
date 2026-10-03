@@ -1,0 +1,104 @@
+{
+  "exp1": {
+    "experiment": "exp1",
+    "prompt": "lab/tasks/exp1/prompt.md",
+    "grading": {
+      "normative": [
+        "exp1"
+      ],
+      "diagnostic": []
+    }
+  },
+  "T2-D1": {
+    "experiment": "exp2",
+    "prompt": "lab/tasks/exp2/T2-D1/prompt.md",
+    "grading": {
+      "normative": [
+        "exp2/T2-D1"
+      ],
+      "diagnostic": []
+    }
+  },
+  "T2-D2": {
+    "experiment": "exp2",
+    "prompt": "lab/tasks/exp2/T2-D2/prompt.md",
+    "grading": {
+      "normative": [
+        "exp2/T2-D2"
+      ],
+      "diagnostic": []
+    }
+  },
+  "T2-M1": {
+    "experiment": "exp2",
+    "prompt": "lab/tasks/exp2/T2-M1/prompt.md",
+    "grading": {
+      "normative": [
+        "exp2/T2-M1"
+      ],
+      "diagnostic": []
+    }
+  },
+  "T2-M2": {
+    "experiment": "exp2",
+    "prompt": "lab/tasks/exp2/T2-M2/prompt.md",
+    "grading": {
+      "normative": [
+        "exp2/T2-M2"
+      ],
+      "diagnostic": []
+    }
+  },
+  "T2-O1": {
+    "experiment": "exp2",
+    "prompt": "lab/tasks/exp2/T2-O1/prompt.md",
+    "grading": {
+      "normative": [
+        "exp2/T2-O1"
+      ],
+      "diagnostic": []
+    }
+  },
+  "T2-O2": {
+    "experiment": "exp2",
+    "prompt": "lab/tasks/exp2/T2-O2/prompt.md",
+    "grading": {
+      "normative": [
+        "exp2/T2-O2"
+      ],
+      "diagnostic": []
+    }
+  },
+  "T2-R1": {
+    "experiment": "exp2",
+    "prompt": "lab/tasks/exp2/T2-R1/prompt.md",
+    "grading": {
+      "normative": [
+        "exp2/T2-R1"
+      ],
+      "diagnostic": []
+    }
+  },
+  "T2-R2": {
+    "experiment": "exp2",
+    "prompt": "lab/tasks/exp2/T2-R2/prompt.md",
+    "grading": {
+      "normative": [
+        "exp2/T2-R2"
+      ],
+      "diagnostic": []
+    }
+  },
+  "exp3": {
+    "experiment": "exp3",
+    "prompt": "lab/tasks/exp3/prompt.md",
+    "grading": {
+      "normative": [
+        "exp3"
+      ],
+      "diagnostic": [
+        "diag-exp3-1024"
+      ]
+    }
+  }
+}

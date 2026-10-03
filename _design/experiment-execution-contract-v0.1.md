@@ -1,7 +1,7 @@
 # 실험 실행 계약 v0.1
 
 작성일: 2026-10-03
-상태: **FROZEN** (2026-10-03). 판정 근거는 §12. 이후 바꾸면 상태를 REVIEWED 로 되돌리고 §11 · §12 에 이유를 적는다.
+상태: **FROZEN** (2026-10-03, harness 골격 검토 반영 후 재확정). 판정 근거는 §12 6차. 이후 바꾸면 상태를 REVIEWED 로 되돌리고 §11 · §12 에 이유를 적는다.
 기준 설계: `_design/experiment-codebase-design-v0.1.md` (이하 "설계")
 
 이 문서는 설계 §19.2 의 Phase 0B 결정과, A/B 실행에서 Variant 이외의 조건을 고정하는 방법을 정한다.
@@ -68,7 +68,7 @@ A 와 B 의 실행은 아래 값이 모두 같다. "강제" 열은 harness 가 �
 | 세션 ID | 실행마다 새 UUID v4, `--session-id`. `run.json` 에 기록 | 실행 인자 생성 코드 |
 | fallback 모델 | 쓰지 않는다(`--fallback-model` 없음) | 실행 인자 생성 코드 |
 | 과제 문구 | 과제 정의(`lab/harness/config/tasks.json`)가 가리키는 `prompt.md` 의 바이트 그대로. sha256 을 `run.json` 에 기록 | 시험(문구 전달) |
-| 작업 디렉터리 | 컨테이너 안 `/work/shop-admin`. 실행용 저장소를 source commit 으로 clone 하고 `origin` remote 를 지운다 | 준비 단계에서 HEAD 와 source commit 비교 |
+| 작업 디렉터리 | 컨테이너 안 `/work/shop-admin`. 실행용 저장소를 source commit 으로 clone 하고 `origin` remote 와 reflog(`.git/logs`, `ORIG_HEAD`)를 지운다. harness 의 git 명령은 host 전역 · 시스템 git 설정과 사용자 정보 없이 실행한다 | 준비 단계에서 HEAD 와 source commit 비교. `.git` 안에 원본 경로 · host 사용자 이름이 없는지 시험 |
 | 시간 제한 | Agent 시작부터 45분. 넘으면 SIGTERM, 30초 뒤 SIGKILL | 시험(timeout) |
 | 환경 변수 | 허용 목록만 넘긴다. 고정 값: `TZ=Asia/Seoul`, `LANG=ko_KR.UTF-8`, `DISABLE_AUTOUPDATER=1`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, subagent 모델 2개, `CLAUDE_CONFIG_DIR`. 컨테이너 단계에서 `GRADLE_USER_HOME`, `GRADLE_RO_DEP_CACHE`, `PLAYWRIGHT_BROWSERS_PATH`(설계 §15.2). 실행자 환경에서 넘기는 것은 `ANTHROPIC_API_KEY` 뿐이다. `PATH` 와 `HOME=/home/agent` 는 이미지 값을 쓴다. 3단계 host 골격만 실행자의 `PATH` · `HOME` 을 넘긴다 | 실행 인자 생성 코드. `ANTHROPIC_MODEL`, `CLAUDE_CODE_EFFORT_LEVEL` 같은 실행자 환경 변수가 Agent 에 들어가지 않는다 |
 
@@ -202,9 +202,9 @@ USD 2,000. Console workspace 월 spend limit 과 harness 의 누적 비용 계�
 ```
 
 - 숨김 채점은 Agent 결과와 관계없이 실행한다. Agent 가 실패하거나 시간 초과로 끝나도 남은 변경을 채점한다. 성공 여부는 숨김 채점으로 판정하고 Agent 종료 상태는 따로 기록한다
-- 최종 diff 는 Agent 종료 직후에 만든다. 채점은 Agent 작업 디렉터리가 아니라 source commit 을 새로 clone 하고 `final.patch` 를 적용한 채점용 복사본(`grading-workspace/`)으로 한다. 모든 실행과 재채점이 같은 입력으로 채점되고, 채점 대상이 기록된 최종 diff 와 같아진다. `.gitignore` 대상 파일은 채점에 들어가지 않는다
+- 최종 diff 는 Agent 종료 직후에 만든다. diff 는 Agent 작업 디렉터리의 `.git` 이 아니라 harness 가 준비 단계에서 만든 bare 저장소와 임시 index 로 만든다. Agent 가 `.git` 을 지우거나 잠가도 diff 를 만들 수 있다. Agent 가 작업 디렉터리 안에 만든 별도 git 저장소는 diff 에 gitlink 로만 들어가 채점용 복사본에서 빈 디렉터리가 된다(확인한 한계). 채점은 Agent 작업 디렉터리가 아니라 source commit 을 새로 clone 하고 `final.patch` 를 적용한 채점용 복사본(`grading-workspace/`)으로 한다. 모든 실행과 재채점이 같은 입력으로 채점되고, 채점 대상이 기록된 최종 diff 와 같아진다. `.gitignore` 대상 파일은 채점에 들어가지 않는다
 - 상태 이력은 원본 기록(`raw/events.jsonl`)에 전이마다 한 줄씩 남는다. `result.json` 은 마지막 상태와 전체 이력을 담는다
-- harness process 가 강제 종료되면 마지막 상태가 비종료 상태로 남는다. 분석에서는 비종료 상태로 남은 실행을 `harness_failed` 로 취급하고, 마지막 상태로 `stage` 를 정한다. 기록 없음 · `prepared` 는 `prepare`, `running` 은 `agent`(새 attempt), `agent_succeeded` · `agent_failed` · `timed_out` · `grading_succeeded` · `grading_failed` 는 `after_agent`. 재채점 여부는 §7 의 조건을 따른다
+- harness process 가 강제 종료되면 마지막 상태가 비종료 상태로 남는다. 분석에서는 비종료 상태로 남은 실행을 `harness_failed` 로 취급하고, 마지막 상태로 `stage` 를 정한다. 기록 없음 · `prepared` 는 `prepare`, `running` 은 `agent`(새 attempt). 단 `running` 이어도 Agent 종료 기록(`agent_process`)이 있고 그 분류가 Agent 관찰(`agent_succeeded`, `agent_failed`, `timed_out`)이면 `after_agent` 다. `agent_succeeded` · `agent_failed` · `timed_out` · `grading_succeeded` · `grading_failed` 는 `after_agent`. 재채점 여부는 §7 의 조건을 따른다
 
 ## 6.3 원인 구분
 
@@ -226,7 +226,9 @@ USD 2,000. Console workspace 월 spend limit 과 harness 의 누적 비용 계�
 | 판정 묶음 exit ≠ 0 이고 JUnit 이 없거나, 읽을 수 없거나, 시험이 0개 | 묶음 `error` | Variant build 실패 · 애플리케이션 시작 실패. Agent 변경이 원인일 수 있어 채점 실패로 본다 |
 | 판정 묶음 exit 0 인데 JUnit 이 없거나 시험이 0개 | 묶음 `error` | |
 | 판정 묶음 30분 초과 | 같은 산출물로 그 묶음을 1회 다시 실행하고, 다시 초과하면 묶음 `timed_out` | 채점 실패로 본다. 기준 commit 은 시간 안에 채점되는 것을 실험 전에 확인하므로, 반복 초과는 Agent 변경(build 정지 같은)이 원인일 가능성이 높다. 같은 산출물을 다시 보는 것이라 Agent 결과를 다시 뽑지 않는다 |
-| 판정 채점 port 사전 확인 실패, `run.sh` 시작 실패 | `harness_failed` | `after_agent`. 채점이 결과를 내지 못했다 |
+| 판정 채점 port 사전 확인 실패, `run.sh` 시작 실패, harness 시간 초과가 아닌데 `run.sh` 가 exit 130(INT · TERM trap)이나 signal 로 끝남(외부 중단), Agent 실행 중 harness 저장소의 commit · `lab/` 변경이 바뀜 | `harness_failed` | `after_agent`. 채점이 결과를 내지 못했다 |
+| `run.sh` 가 exit 137 · 143 으로 끝남 | 묶음 `error` | `set -e` 인 `run.sh` 에서 build 자식(gradlew, pnpm)이 signal 로 죽은 경우다. 메모리 제한 안의 build 실패처럼 Agent 변경이 원인일 수 있어 채점 실패로 본다 |
+| 판정 묶음의 판정 기록 | harness 가 묶음 판정을 정한 경우에만 남긴다 | 판정 기록이 없는 묶음은 결과 없음(채점 결측)이다. 판정 묶음 중 하나라도 결과가 없으면 `grading.outcome` 은 정하지 않는다 |
 | 진단 묶음의 결과와 진단 단계의 모든 예외 | 상태에 영향 없음 | `result.json` 의 `grading.diagnostic` 에 기록만 한다 |
 | 그 밖의 harness 내부 예외 | `harness_failed` | 예외가 난 단계. `stage` 값은 `prepare`, `agent_start`, `agent`, `after_agent` 넷뿐이고 diff · 채점 · 정리 단계는 `after_agent` 다 |
 
@@ -240,7 +242,8 @@ USD 2,000. Console workspace 월 spend limit 과 harness 의 누적 비용 계�
 | `T2-M1` ~ `T2-R2` | `exp2/<과제>` | 없음 |
 | `exp3` | `exp3` | `diag-exp3-1024` |
 
-- 판정 묶음을 모두 실행한 뒤 진단 묶음을 실행한다. 묶음마다 `run.sh` 를 따로 호출한다. 첫 호출만 Variant 를 build 하고 이후 호출은 `GRADING_SKIP_BUILD=1` 이다
+- 판정 묶음을 모두 실행한 뒤 진단 묶음을 실행한다. 묶음마다 `run.sh` 를 따로 호출한다. 첫 호출은 Variant 를 build 하고(`GRADING_SKIP_BUILD=0`), 이후 호출은 `GRADING_SKIP_BUILD=1` 이다. 직전 호출이 시간 초과였으면 build 산출물을 믿을 수 없어 다음 호출도 build 한다
+- `run.sh` 에는 허용 목록 환경 변수만 넘긴다(`PATH`, `HOME`, `JAVA_HOME`, `PLAYWRIGHT_BROWSERS_PATH`, `TZ`, `LANG`, `GRADING_LOG_DIR`, `GRADING_SKIP_BUILD`). 호출마다 build 여부를 원본에 기록한다
 - 실험 1 의 "Variant 자체 시험 전체 통과"(설계 §8.1)는 Variant 의 `verify-all.sh` 가 생긴 뒤 판정 묶음과 같은 규칙의 판정 항목으로 더한다. 실패하면 `grading_failed` 다. 3단계 골격에는 없다
 - 실험 2 에서 실행마다 하는 채점은 "개별 과제 판정" 이다. 설계 §8.2 의 순차 통합 뒤 채점 8개가 "실험 2 숨김 채점 결과" 이고 통합 단계 harness 가 맡는다. 3단계 골격은 실행 1개 단위만 다룬다
 
@@ -267,8 +270,10 @@ USD 2,000. Console workspace 월 spend limit 과 harness 의 누적 비용 계�
 | `harness_failed`, `stage` 가 `prepare` · `agent_start` · `agent` | 새 attempt. Agent 관찰이 없거나 실행 환경 때문에 깨졌다 |
 | `harness_failed`, `stage = after_agent` | Agent 를 다시 실행하지 않는다. 보존된 작업 디렉터리로 채점만 다시 실행한다(재채점) |
 
+- 판정 순서: `error_kind = api_error` 를 먼저 본다. `api_error` 이면서 Agent 이후 단계에서 harness 가 실패한 실행도 새 attempt 다. 그다음 `harness_failed` 의 `stage` 를 본다. 비종료 상태로 남은 실행은 §6.2 의 규칙으로 정한 `stage` 를 쓴다
+- `api_error` 판정 근거: `is_error` 인 result 의 `api_error_status`(HTTP 상태 숫자)가 429 이거나 500 이상. 보조로 오류 result 의 `subtype` · `error` · `errors`, `API Error:` 로 시작하는 `result` 문구와 stderr 줄. CLI 2.1.287 의 result schema 에 `api_error_status` 가 있는 것을 설치된 CLI 로 확인했다. Agent 가 쓴 그 밖의 문장과 stderr 는 보지 않는다
 - 새 attempt 는 같은 실험 · 과제 · Variant · 반복 번호, 새 실행 ID, `attempt + 1`, `retry_of = <이전 실행 ID>` 다. 실패한 attempt 바로 다음 순서에 실행한다
-- 반복 번호당 최대 3 attempt. 3번 모두 재실행 대상으로 끝나면 그 반복을 결측으로 기록하고 반복을 더하지 않는다
+- 반복 번호당 최대 3 attempt. 3번 모두 재실행 대상으로 끝나면 그 반복을 결측(`missing`)으로 기록하고 반복을 더하지 않는다. 결측 반복의 마지막 attempt 는 분석 데이터로 쓰지 않는다
 - 재채점은 Agent 관찰을 바꾸지 않으므로 attempt 를 늘리지 않는다. 재채점 결과는 원래 실행 디렉터리 안에 따로 기록한다. 재채점 기능은 pilot 전에 구현한다(체크리스트 3단계)
 - 재채점 대상은 결과가 기록되지 않은 판정 묶음이다. 이미 결과가 기록된 판정 묶음은 그 뒤에 harness 예외가 나도 기록된 결과를 쓴다
 - 재채점도 첫 채점과 같이 source commit 을 새로 clone 하고 `final.patch` 를 적용한 복사본으로 한다(§6.2). `final.patch` 가 없으면(최종 diff 생성 실패) 보존된 작업 디렉터리에서 diff 를 먼저 다시 만든다
@@ -310,24 +315,30 @@ USD 2,000. Console workspace 월 spend limit 과 harness 의 누적 비용 계�
 
 ```
 <결과 root>/
-  experiments/<experiment>.lock.json     실험 잠금(§8.3)
+  experiments/<experiment>/             실험 잠금(§8.3). condition, task-<과제>, source-<variant>, grading-code 키별 파일
   runs/<run_id>/
     run.json                             실행 설정. 준비 단계에서 한 번 쓰고 바꾸지 않는다
-    result.json                          정규화 결과. raw/ 와 run.json 에서 다시 만들 수 있다
+    result.json                          정규화 결과. run.json, raw/, artifacts/ 에서 다시 만들 수 있다
     raw/                                 원본. 만든 그대로 둔다
-      events.jsonl                       harness 기록(상태 전이, process 시작 · 종료, 오류)
+      events.jsonl                       harness 기록(실행 시작, 상태 전이, process 종료, 채점 판정, harness 코드 상태, 오류)
       fingerprint.json                   환경 확인 명령의 출력
-      prepare/                           clone · 설치 로그
+      harness-lab.diff                   lab/ 미commit 변경(pilot · 보정 실행만)
+      prepare/                           clone 로그
+      diff/                              최종 diff 생성 로그
+      agent/invocation.json              Agent 실행 파일, 인자, 환경 변수 이름
       agent/stdout.jsonl                 Agent 표준 출력(stream-json) 바이트 그대로
       agent/stdout.recv.jsonl            stdout 줄마다 수신 시각
       agent/stderr.log
       agent/claude-config/               세션 기록(transcript) 복사본. 컨테이너 단계
       agent/hooks/                       hook 기록. 컨테이너 단계
-      grading/<묶음>/                    run.sh 의 GRADING_LOG_DIR(JUnit, 애플리케이션 로그, Playwright 산출물)와 run.sh 출력
+      grading/copy-<round>/              채점용 복사본 생성 로그
+      grading/<묶음>/<round>-<try>/      run.sh 의 GRADING_LOG_DIR(JUnit, 애플리케이션 로그, Playwright 산출물)와 run.sh 출력
     artifacts/
       final.patch                        source commit 대비 최종 diff(새 파일 포함, binary 포함)
       diff-numstat.txt, diff-name-status.txt
     workspace/shop-admin/                Agent 작업 디렉터리. 실행 후에도 지우지 않는다
+    grading-workspace/<round>/shop-admin/  채점용 복사본(source commit + final.patch). 첫 채점 round 는 0
+    harness/                             harness 소유 bare 저장소(source.git), 임시 index, git 용 빈 HOME
 ```
 
 설계 §14.5 의 `stream.jsonl`, `transcript.jsonl`, `hooks.jsonl` 은 각각 `raw/agent/stdout.jsonl`(+ 수신 시각 파일), `raw/agent/claude-config/`, `raw/agent/hooks/` 다.
@@ -339,13 +350,17 @@ USD 2,000. Console workspace 월 spend limit 과 harness 의 누적 비용 계�
 - `result.json` 은 실행 중 관찰한 값만 담는다. 상태와 이력, 시각, Agent 종료, 사용량, 실제 사용 모델, diff 규모, 채점 결과, fingerprint, 원본 · 산출물 위치
 - 실행 조건 hash = sha256(실행 설정 파일 정규화 JSON(key 정렬, 공백 없음) + 실행 설정 파일이 가리키는 파일(harness settings, hook 스크립트)의 sha256 목록). 이미지 digest 는 실행 설정 파일 안에 있다. 같은 실험 ID 의 모든 실행이 같아야 한다
 - 실행 입력 hash = (`experiment`, `task`, `variant`, `repetition`, `source.commit`, 과제 문구 sha256, 실행 조건 hash)의 sha256. 같은 값이면 같은 조건의 같은 반복이고, attempt 와 `run_id` 만 다르다
-- 실험 잠금: 실험 ID 의 첫 실행이 `experiments/<experiment>.lock.json` 에 실행 조건 hash 를 쓴다. 이후 hash 가 다른 실행은 실행 디렉터리를 만들기 전에 거부한다
+- 실험 잠금: `experiments/<experiment>/` 아래에 키마다 파일 하나를 처음 쓴 값으로 고정한다. 키는 실행 조건 hash, 과제별 과제 문구 sha256 · 채점 묶음 정의, Variant 별 source commit 이다. 이후 값이 다른 실행은 실행 디렉터리를 만들기 전에 거부한다. 과제 문구를 읽은 뒤에 잠금을 쓴다
+- harness 코드 버전: 집계 실험(`exp1` ~ `exp3`)은 `lab/` 에 미commit 변경이 없을 때만 시작한다. pilot · 보정 실행은 변경이 있어도 실행하고, 변경 목록, `git diff HEAD -- lab`, 미추적 파일 내용(1MB 넘으면 sha256)을 `raw/harness-lab.diff` 에 남긴다. 채점 직전에 `lab/` 의 commit 된 tree hash 와 미commit 변경 기록의 hash 를 시작 때와 비교하고, 다르면 `harness_failed(after_agent)` 다. 저장소의 `lab/` 밖 commit 은 비교하지 않는다
+- 채점 · 과제 코드 잠금: `lab/grading`, `lab/tasks` 의 commit 된 tree hash 를 실험 잠금 키로 고정한다. harness 코드(`lab/harness`)는 §7 이 실험 중 수정을 허용하므로 잠그지 않고 실행마다 commit SHA 를 기록한다
+- 결과 root 는 실행 기계마다 §2 의 경로 하나만 쓴다. 잠금은 결과 root 안에 있으므로 다른 경로를 주면 잠금이 적용되지 않는다
 
 ## 8.4 원본과 정규화 결과
 
 - 원본(`raw/`)은 process 출력을 바이트 그대로 저장한다. 수신 시각은 원본 줄을 바꾸지 않고 별도 파일에 둔다. 설계 §14.5 의 "각 줄에 수신 시각을 붙인다" 를 이 방식으로 대신한다. 원본 바이트를 감사할 수 있게 하기 위해서다
-- 정규화 결과(`result.json`)는 `run.json` 과 `raw/` 만 읽는 함수가 만든다. 같은 입력이면 같은 바이트를 낸다. key 순서 고정, 묶음 목록은 실행 순서, 이력은 기록 순서, 시각은 원본에 기록된 문자열, 경로는 실행 디렉터리 기준 상대 경로
+- 정규화 결과(`result.json`)는 `run.json`, `raw/`, `artifacts/` 만 읽는 함수가 만든다. 실행 시작 시각은 실행 디렉터리를 만든 직후의 기록(`run_started`)이다. 같은 입력이면 같은 바이트를 낸다. key 순서 고정, 묶음 목록은 실행 순서, 이력은 기록 순서, 시각은 원본에 기록된 문자열, 경로는 실행 디렉터리 기준 상대 경로
 - harness 는 상태가 바뀔 때마다 `result.json` 을 다시 만든다. 실패로 끝난 실행도 그때까지의 원본과 산출물을 지우지 않는다
+- 실험 중 harness 코드를 고칠 수 있으므로(§7) 실행마다 `result.json` 을 만든 정규화 코드 버전이 다를 수 있다. 분석 전에 모든 `result.json` 을 한 harness commit 으로 다시 만들고, 그 commit 을 결과 문서에 적는다
 - 결과 root 는 Git 작업 트리 밖이어야 한다. harness 는 결과 root 가 Git 작업 트리 안이면 시작하지 않는다
 - 실험이 끝나면 그 실험의 실행 디렉터리를 archive 하고 sha256 목록을 만든다. 다시 만들 수 있는 디렉터리(`node_modules`, `build`, `.gradle`, `dist`)는 뺀다. GitHub release 파일 한도(파일당 2 GiB 미만, docs.github.com 「About releases」)를 넘으면 실행 단위로 나눈다
 - archive 는 private GitHub 저장소의 release asset 으로 올리고, sha256 목록만 결과 문서와 함께 이 저장소에 commit 한다. 공개 여부는 결과 문서 단계에서 정한다 [결정 필요, 체크리스트 11단계]
@@ -373,7 +388,11 @@ USD 2,000. Console workspace 월 spend limit 과 harness 의 누적 비용 계�
 
 ## 9.1 environment fingerprint
 
-OS 종류와 release, CPU 아키텍처, 익명 machine id(hostname 의 sha256 앞 12자리), host load average(1분), harness 저장소 commit SHA 와 미commit 변경 여부, source commit SHA, Java · Node.js · pnpm · Claude Code 버전(명령 출력 원문과 추출 값), 모델, effort.
+host(harness 를 실행한 기계): OS 종류와 release, CPU 아키텍처, 익명 machine id(hostname 의 sha256 앞 12자리), load average(1분), harness 의 Node.js 버전.
+harness: 저장소 commit SHA, `lab/` 미commit 변경 여부.
+Agent 환경: Java · Node.js · pnpm · Claude Code 버전(명령 출력 원문과 추출 값).
+실행 설정: source commit SHA, 모델, effort.
+fingerprint 는 clone 전에 남겨 준비 단계 실패 실행에도 기록이 있게 한다.
 실행 단계에서는 Agent 컨테이너 안에서 측정한다. 3단계 골격은 harness 가 실행되는 기계에서 측정한다.
 
 ---
@@ -385,7 +404,10 @@ OS 종류와 release, CPU 아키텍처, 익명 machine id(hostname 의 sha256 �
 - 실행당 비용(§5.1 의 pilot 확인 규칙)
 - `WebSearch` · `WebFetch` 호출이 subagent 를 포함해 0건인지. `--dangerously-skip-permissions` 와 `--disallowedTools` 를 함께 쓸 때 deny 가 적용되는지는 확인하지 않았다
 - subagent 가 `claude-opus-5-5` 로 실행되는지(`modelUsage`)
+- 인증 실패(401) · 권한 실패(403) · spend limit 도달 시의 `api_error_status` 와 종료 형식. 지금 규칙은 429 · 500 이상만 `api_error` 로 보고, 401 · 403 은 `other`(Agent 관찰)로 분류한다. 실행 환경 문제이므로 pilot 결과로 분류 규칙을 정한다
 - 사용자 전역 설정이 세션 기록에 나타나지 않는지(체크리스트 3단계 다음 단계 진입 조건)
+
+확인한 한계: Agent process 가 시간 제한과 거의 같은 시각에 스스로 끝나면 `timed_out` 으로 기록될 수 있다. harness 는 시간 초과 판정을 timer 다음 check 단계로 미뤄, 그사이 처리된 exit 이 있으면 시간 초과로 보지 않는다. 같은 event loop 회차 안에서 끝난 경우는 남는다
 
 ---
 
@@ -397,6 +419,9 @@ OS 종류와 release, CPU 아키텍처, 익명 machine id(hostname 의 sha256 �
 | 2026-10-03 | effort `high` → `medium`, subagent 모델 고정, 환경 변수 허용 목록, Agent 가 볼 수 있는 경로, 실패 원인 단계별 재실행, 실행 순서 | 1차 독립 검토(§12) |
 | 2026-10-03 | signal 종료 분류, 비종료 상태의 stage, 재채점 규칙, 판정 채점 시간 초과 1회 재실행, 연결 경로 보완 | 2차 독립 검토(§12) |
 | 2026-10-03 | 채점 입력을 채점용 복사본으로 통일, stage 값 4개로 한정, 재채점 대상을 판정 묶음 단위로 | 3차 확인(§12) |
+| 2026-10-03 | 작업 디렉터리 reflog 제거와 git 설정 고정, harness 소유 git 으로 diff, `run.sh` 외부 중단 분류, 판정 기록 규칙, 채점 환경 변수 허용 목록, 재실행 판정 순서와 `api_error` 판정 근거, 잠금 키, `lab/` 미commit 변경 규칙, fingerprint 구성 | harness 골격 검토(§12 4차) |
+| 2026-10-03 | `api_error_status` 판정 근거, `run.sh` 137 · 143 은 묶음 `error`, `running` 의 Agent 종료 기록 처리, 채점 · 과제 코드 잠금, 채점 직전 harness 코드 재확인, §8.2 디렉터리 표 | harness 골격 재확인(§12 5차) |
+| 2026-10-03 | 채점 직전 확인을 `lab/` tree · 변경 기록 hash 로, `running` 판정 조건, 분석 전 정규화 버전 통일, §8.2 잠금 · 정규화 입력 줄, pilot 확인 항목(401 · 403) | harness 골격 최종 확인(§12 6차) |
 
 ---
 
@@ -426,3 +451,11 @@ minor 9건은 모두 반영했다: 절 번호 참조(§2, 설계 §15.3 · §19.
 minor 4건 반영: 비종료 상태의 재채점 문구를 §7 조건으로 통일(§6.2), `stage` 값 4개로 한정(§6.3), 첫 채점도 채점용 복사본으로 실행(§6.2), 설계 §20.5 에 검토 기록 추가.
 
 판정: blocker 0, major 0. 상태를 FROZEN 으로 정한다.
+
+4차(harness 골격 독립 검토 A · B · C, 각각 별도 세션): Review A(실험 타당성) major 2 · minor 4, Review B(재현성) major 2 · minor 10, Review C(실패 의미) major 3 · minor 9, blocker 0. 계약 규칙으로 명시할 필요가 있는 지적을 위 변경 기록 행에 반영하고 상태를 REVIEWED 로 되돌렸다. harness 쪽 수정은 `lab/harness/` 에 있다.
+
+5차(같은 검토자 세 명의 재확인): Review A blocker 0 · major 0 · minor 3(FROZEN 동의), Review B blocker 0 · major 0 · minor 5(§8.2 표 갱신 조건으로 FROZEN 동의), Review C blocker 0 · major 2 · minor 3. Review C 의 major 2건은 이번 수정에서 생긴 규칙 오류다. `api_error` 를 구조화된 문자열 필드로만 판정하면 CLI 2.1.287 의 `api_error_status` 를 놓친다는 것과, `run.sh` 137 · 143 을 외부 중단으로 보면 build 실패가 채점 결측이 된다는 것이다. 둘 다 위 변경 기록 행대로 고쳤고 minor 11건도 반영했다.
+
+6차(Review B · C 최종 확인): Review B blocker 0 · major 0 · minor 4, Review C blocker 0 · major 0 · minor 3. 두 검토자 모두 FROZEN 에 동의했다(Review B 는 §8.2 두 줄 수정을 조건으로 했다). Review A 는 5차에서 동의했다. 남은 minor 7건은 위 변경 기록 행대로 반영했고, 401 · 403 분류는 §10 pilot 확인 항목으로 남겼다.
+
+6차 판정: blocker 0, major 0. 실행 계약을 다시 FROZEN 으로 정한다.

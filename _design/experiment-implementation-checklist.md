@@ -89,7 +89,8 @@ Variant 보다 먼저 쓴다. 과제 문구도 이 단계에서 먼저 고정한
 
 진입 조건: 0B 완료. 설계와 실행 계약이 FROZEN.
 
-- [ ] harness 골격: 실행 단위(입력 spec), 실행 상태 모델, `run.json` · `result.json`, environment fingerprint, 채점 adapter, 재실행, 실험 잠금(실행 계약 §6 ~ §9)
+- [x] harness 골격: 실행 단위(입력 spec), 실행 상태 모델, `run.json` · `result.json`, environment fingerprint, 채점 adapter, 재실행, 실험 잠금(실행 계약 §6 ~ §9)
+  - 결과: `lab/harness/`. 가짜 process 시험 56개 통과(`pnpm test`). 독립 검토 A(실험 타당성) · B(재현성) · C(실패 의미) blocker 0, major 0. 실제 Claude 실행 명령은 컨테이너 항목과 함께 더한다
   - 완료 조건: 실제 Claude 호출 없이 가짜 process 로 정상 종료, Agent 비정상 종료, timeout, 채점 성공 · 실패, harness 내부 오류를 자동 시험으로 확인한다
 - [ ] Docker Desktop VM 메모리 20GB 이상, 실험 기간 자동 갱신 끄기(실행 계약 §4.1)
 - [ ] 컨테이너 연결 경로: workspace, 빈 `CLAUDE_CONFIG_DIR`, hook 출력, 읽기 전용 `/opt/cc/` 만 연결(실행 계약 §4.3)

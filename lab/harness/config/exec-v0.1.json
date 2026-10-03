@@ -1,0 +1,23 @@
+{
+  "id": "exec-v0.1",
+  "agent": {
+    "executable": "claude",
+    "version": "2.1.287",
+    "model": "claude-opus-5-5",
+    "subagent_model": "claude-opus-5-5",
+    "effort": "medium",
+    "max_budget_usd": 15,
+    "disallowed_tools": ["WebSearch", "WebFetch"],
+    "settings_file": null
+  },
+  "timeouts_ms": {
+    "prepare": 900000,
+    "agent": 2700000,
+    "grace": 30000,
+    "grading_normative": 1800000,
+    "grading_diagnostic": 900000
+  },
+  "retry": { "max_attempts": 3 },
+  "grading": { "run_script": "lab/grading/run.sh" },
+  "environment": { "image": null, "platform": "linux/arm64", "cpus": 4, "memory": "8g" }
+}
