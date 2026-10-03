@@ -29,8 +29,9 @@ export interface ExecConfig {
   };
   retry: { max_attempts: number };
   grading: { run_script: string };
-  // runtime: docker 는 실제 실행(실행 계약 §4), local 은 컨테이너 없이 가짜 process 로 orchestration 만 시험할 때 쓴다
-  environment: { runtime: 'docker' | 'local'; image: string | null; platform: string; cpus: number; memory: string };
+  // runtime: docker 는 실제 실행(실행 계약 §4), local 은 컨테이너 없이 가짜 process 로 orchestration 만 시험할 때 쓴다.
+  // grading_network: 채점 컨테이너의 docker network. 의존성 cache 층이 생기기 전(체크리스트 7단계)에는 bridge 다
+  environment: { runtime: 'docker' | 'local'; image: string | null; platform: string; cpus: number; memory: string; grading_network: 'bridge' | 'none' };
 }
 
 export interface TaskDef {

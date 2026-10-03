@@ -1,7 +1,7 @@
 # A/B 실험 코드베이스 설계 v0.1
 
 작성일: 2026-10-03
-상태: **FROZEN** (2026-10-03, 변경 3 재확정). 판정 근거는 §20. 실험 애플리케이션 코드는 아직 없다.
+상태: **REVIEWED** (2026-10-03, 변경 4 검토 중). 판정 근거는 §20. 실험 애플리케이션 코드는 아직 없다.
 실행 조건 · 예산 · 기록 · 실행 상태: `_design/experiment-execution-contract-v0.1.md` (이하 "실행 계약")
 기준 커밋: `main` `2f43bcf` (PR #1 병합 시점)
 입력 문서: `_research/06` ~ `_research/17`, `_research/sources.md`, `_research/02`, `_research/04`, `_research/05`
@@ -961,14 +961,14 @@ Agent 의 자연어 보고는 측정에 쓰지 않는다. 도구 호출 기록, 
 |---|---|---|---|
 | 이벤트 stream | `claude -p --output-format stream-json --verbose --include-hook-events` | 도구 호출(`tool_use` 이름 · 입력), 도구 결과, 마지막 `result` 의 소요 시간 · turn 수 · 비용 · token | `claude --help` |
 | 세션 기록 | `$CLAUDE_CONFIG_DIR/projects/<경로>/<session-id>.jsonl` | 항목별 `timestamp`, `tool_use` 입력, `toolUseResult`(Bash 는 `stdout`, `stderr`, `interrupted`), 실패한 Bash 결과의 `Exit code N` | 로컬 세션 기록 확인 |
-| hook 기록 | `PreToolUse`, `PostToolUse` hook 이 입력 JSON 을 파일에 추가 | `tool_use_id`, `tool_name`, `tool_input`, `tool_response`(Bash 의 `exit_code` 포함). 입력에 timestamp 필드는 없으므로 hook 이 기록 시각을 붙인다 | https://code.claude.com/docs/en/hooks |
+| hook 기록 | `PreToolUse`, `PostToolUse`, `PostToolUseFailure` hook 이 입력 JSON 을 파일에 추가. 실패한 도구 호출(exit ≠ 0 인 Bash 포함)에는 `PostToolUse` 대신 `PostToolUseFailure` 가 실행된다(설치된 CLI 2.1.287 코드로 확인, 실제 실행 확인은 pilot) | `tool_use_id`, `tool_name`, `tool_input`, `tool_response`(Bash 의 `exit_code` 포함), 실패 시 오류. 입력에 timestamp 필드는 없으므로 hook 이 기록 시각을 붙인다 | https://code.claude.com/docs/en/hooks |
 | 세션 ID 고정 | `--session-id <uuid>` | 실행 ID 와 세션 기록 연결 | `claude --help` |
 
 hook 은 기록만 하고 출력과 결정을 내지 않는다. hook 설정은 harness 가 `--settings` 로 넘기며 실행용 저장소에 없다.
 
 ## 14.3 시험 산출물 수집
 
-- `PostToolUse` hook 이 Bash 명령을 시험 명령 패턴(`gradlew .*test`, `vitest`, `pnpm (test|e2e|test:stories)`, `playwright test`)으로 판정하면 `backend/build/test-results/`, `frontend/test-results/`, `frontend/reports/junit*.xml` 중 그 명령의 `PreToolUse` 기록 시각 이후 수정된 파일만 `artifacts/test-<순번>/` 으로 복사한다. Gradle 은 이번에 실행하지 않은 시험 클래스의 이전 XML 을 지우지 않으므로, 시각으로 거르지 않으면 이전 결과를 이번 결과로 잘못 센다
+- `PostToolUse` · `PostToolUseFailure` hook 이 Bash 명령을 시험 명령 패턴(`gradlew .*test`, `vitest`, `verify-all.sh`, `pnpm [-C <경로> | --dir <경로>] [run] (test|e2e|test:stories)`, `playwright test`)으로 판정하면 `backend/build/test-results/`, `frontend/test-results/`, `frontend/reports/junit*.xml` 중 그 명령의 `PreToolUse` 기록 시각 이후 수정된 파일만 `artifacts/test-<순번>/` 으로 복사한다. 시험이 실패한 명령도 복사한다. 경로는 Agent 의 현재 디렉터리가 아니라 작업 디렉터리 루트(`/work/shop-admin`) 기준이다. hook 입력의 `cwd` 는 Agent 가 `cd backend` 하면 바뀌기 때문이다. Gradle 은 이번에 실행하지 않은 시험 클래스의 이전 XML 을 지우지 않으므로, 시각으로 거르지 않으면 이전 결과를 이번 결과로 잘못 센다
 - Vitest · Playwright 의 JUnit reporter 는 두 Variant 설정에 같게 넣는다
 - 실행 종료 후 harness 가 5단계 전체 검증을 따로 실행하고 시간을 잰다. Agent 의 실행 시간과 섞지 않는다
 
@@ -1035,8 +1035,8 @@ review.json       사람 검토 결과
 - `lab/variants/<variant>/` 만 담은 새 git 저장소. 저장소 이름은 두 Variant 모두 `shop-admin`
 - commit 1개, 메시지 `Initial commit`. 작성 이력에 실험 의도가 드러날 수 있어 이력을 넘기지 않는다
 - `_research`, `_design`, `lab/spec`, `lab/grading`, `lab/tasks`, 다른 Variant 는 넣지 않는다
-- `CLAUDE.md`, `AGENTS.md`, `.claude/` 는 두 Variant 모두 두지 않는다. README 만 둔다
-- 내보낸 저장소에서 `agentic`, `variant`, `실험`, `experiment` 문자열을 검색해 0건이어야 한다
+- `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `.claude/` 는 두 Variant 모두 하위 디렉터리를 포함해 두지 않는다. README 만 둔다
+- 내보낸 저장소에서 `agentic`, `variant`, `실험`, `experiment` 문자열을 파일 내용(binary 포함)과 경로 이름에서 검색해 0건이어야 한다
 
 ## 15.2 실행 단위
 
@@ -1355,3 +1355,12 @@ FROZEN → REVIEWED. 사용자 결정으로 Agent 인증을 실험 전용 API ke
 
 독립 검토: 1차 blocker 0, major 2(한도 도달 문구 분류, usage credits), minor 8. 반영 뒤 재확인 blocker 0, major 0, minor 6. 검토자가 FROZEN 에 동의했고 minor 도 반영했다. 지적과 수정은 실행 계약 §12 7차 · 8차.
 판정: blocker 0, major 0. 설계를 FROZEN 으로 되돌린다.
+
+## 20.7 변경 4: hook 기록 범위와 내보내기 검사(2026-10-03)
+
+FROZEN → REVIEWED. 컨테이너 단계 독립 검토(실행 계약 §12 9차)에서 설계 문장과 관련된 지적 셋을 반영했다.
+
+- §14.2 · §14.3: 실패한 Bash 는 `PostToolUse` 가 아니라 `PostToolUseFailure` hook 을 실행한다. 두 hook 모두에서 시험 결과를 복사하고, 결과 파일 경로를 Agent 의 현재 디렉터리가 아니라 작업 디렉터리 루트 기준으로 찾는다. 시험 명령 패턴에 `lab/spec/conventions.md` §8 의 `verify-all.sh` 와 `pnpm` 의 `run` · `-C` · `--dir` 형식을 더했다. 이 수정이 없으면 실패한 시험 실행과 `backend/` 에서 실행한 시험의 결과 파일이 빠져 §14.4 의 재시도 횟수 · 첫 신뢰 가능한 시험 시간 입력이 사라진다
+- §15.1: 지침 파일 검사를 하위 디렉터리와 `CLAUDE.local.md` 까지 넓히고, 금지 문자열 검색에 경로 이름과 binary 파일을 더했다. Claude Code 는 하위 디렉터리의 `CLAUDE.md` 와 루트의 `CLAUDE.local.md` 를 읽으므로, 한 Variant 에만 있으면 Variant 밖의 차이가 생긴다
+
+실험 조건(모델, 도구, 지침, 과제)은 바뀌지 않는다. 판정은 실행 계약 9차 재확인과 함께 정한다.

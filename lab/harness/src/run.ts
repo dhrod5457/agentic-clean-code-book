@@ -1,9 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { agentEnv, classifyAgent, claudeArgs, containerAgentEnv, summarizeStream, type ContainerExit } from './agent.ts';
-import { agentRunArgs, CONTAINER, containerSettingsPath, envFlags, gradingRunArgs, imageProbe, inspectContainer, removeContainer } from './docker.ts';
+import { agentRunArgs, CONTAINER, containerSettingsPath, envFlags, gradingRunArgs, imageProbe, settleContainer, type SettledContainer } from './docker.ts';
 import {
   canonicalJson, conditionHash, FORBIDDEN, inputHash, LAB_ROOT, sha256, SpecError, validateSpec,
   type ExecConfig, type RunSpec, type TaskDef,
@@ -16,10 +16,10 @@ import {
 } from './normalize.ts';
 import { isSuspended, runProcess, systemClock, type Clock } from './process.ts';
 import { canTransition, isTerminal, stageOfAbandoned, type RunState, type Stage } from './state.ts';
-import { captureDiff, cloneAt, gradingCopy, harnessGit, type StepOptions } from './workspace.ts';
+import { captureDiff, cloneAt, gradingCopy, guidanceFiles, harnessGit, type StepOptions } from './workspace.ts';
 
 // 실행 1개의 orchestration. 기준은 _design/experiment-execution-contract-v0.1.md §6 ~ §8.
-// 3단계 골격은 컨테이너 없이 host 에서 process 를 실행한다. 실제 Claude 실행은 컨테이너 단계 전까지 하지 않는다(실행 계약 §4.3)
+// runtime docker 는 Agent 와 채점을 컨테이너에서 실행한다(실행 계약 §4). local 은 컨테이너 없이 가짜 Agent 로 orchestration 만 시험할 때 쓴다
 
 export interface RunOptions {
   resultsRoot: string;
@@ -154,13 +154,12 @@ export async function executeRun(spec: RunSpec, opts: RunOptions): Promise<RunOu
   const inContainer = config.environment.runtime === 'docker';
   if (inContainer && config.environment.image === null) throw new SpecError('docker 실행에는 실행 설정의 environment.image 가 필요하다');
   const probe = opts.probe ?? (inContainer ? imageProbe(config.environment.image!) : localProbe);
-  // bind mount 의 host 경로는 컨테이너 안 /proc/self/mountinfo 에 보인다. 연결하는 경로는 모두 결과 root 아래에 두고,
-  // 결과 root 경로에 금지 문자열이 없어야 한다(실행 계약 §4.3)
-  if (inContainer && FORBIDDEN.test(path.resolve(opts.resultsRoot))) throw new SpecError(`결과 root 경로에 Agent 에게 보이면 안 되는 문자열이 있다: ${opts.resultsRoot}`);
-
   // 여기까지의 실패는 실행을 시작하지 않은 것이다. 실행 디렉터리를 만들지 않는다
   const task = validateSpec(spec, opts.tasks);
   ensureResultsRoot(opts.resultsRoot);
+  // bind mount 의 host 경로는 symlink 를 푼 실제 경로로 컨테이너 안 /proc/self/mountinfo 에 보인다.
+  // 연결하는 경로는 모두 결과 root 아래에 두고, 결과 root 의 실제 경로에 금지 문자열이 없어야 한다(실행 계약 §4.3)
+  if (inContainer && FORBIDDEN.test(realpathSync(opts.resultsRoot))) throw new SpecError(`결과 root 경로에 Agent 에게 보이면 안 되는 문자열이 있다: ${realpathSync(opts.resultsRoot)}`);
   const changes = labChanges(labRoot);
   if (/^exp[123]/.test(spec.experiment) && changes !== '') {
     throw new SpecError(`집계 실험은 lab/ 에 미commit 변경이 없을 때만 시작한다: ${changes === null ? 'git 상태를 확인하지 못했다' : changes.split('\n').join(', ')}`);
@@ -224,7 +223,7 @@ export async function executeRun(spec: RunSpec, opts: RunOptions): Promise<RunOu
   try {
     // 준비. fingerprint 를 clone 보다 먼저 남겨 준비 실패 실행에도 환경 기록이 있게 한다
     await ctx.guarded('prepare', async () => {
-      const fp = await collectFingerprint(probe, config.agent.executable, labRoot);
+      const fp = await collectFingerprint(probe, config.agent.executable, labRoot, inContainer);
       writeFileSync(path.join(runDir, RAW.fingerprint), `${JSON.stringify(fp, null, 2)}\n`);
       if (changes !== '') writeFileSync(path.join(runDir, RAW.harnessDiff), labChangeRecord(labRoot, changes));
       for (const tool of TOOLS) {
@@ -261,6 +260,8 @@ export async function executeRun(spec: RunSpec, opts: RunOptions): Promise<RunOu
       }
       if (auth.exit_code !== 0 || method !== 'oauth_token') throw new HarnessError('prepare', `Agent 인증 수단이 구독 token(oauth_token)이 아니다: ${String(method)}`);
       await cloneAt(spec.source.repo, spec.source.commit, workspace, step(RAW.prepare));
+      const guides = guidanceFiles(workspace);
+      if (guides.length > 0) throw new HarnessError('prepare', `작업 디렉터리에 지침 파일이 있다: ${guides.join(', ')}`);
       await harnessGit(spec.source.repo, path.join(runDir, HARNESS_GIT), step(RAW.prepare));
     });
     ctx.transition('prepared');
@@ -303,17 +304,9 @@ export async function executeRun(spec: RunSpec, opts: RunOptions): Promise<RunOu
     });
     let containerExit: ContainerExit | null = null;
     if (inContainer) {
-      // 시간 초과로 docker client 만 끝났으면 컨테이너가 남아 있을 수 있다. 종료 상태를 읽고 정리한다
-      let state = await inspectContainer(containerName);
-      if (state.running) {
-        await removeContainer(containerName);
-        state = { ...state, running: false };
-      }
-      containerExit = { found: state.found, exit_code: state.exit_code, oom_killed: state.oom_killed, error: state.error };
+      // docker client 가 끝난 뒤 남은 컨테이너(시간 초과 · 외부 중단)를 끝내고 종료 상태를 읽는다
+      containerExit = await settleContainer(containerName, agent.started_at, path.join(runDir, RAW.agentDockerEvents));
       ctx.event({ type: 'container_exit', at: ctx.now(), role: 'agent', name: containerName, ...containerExit });
-      await removeContainer(containerName);
-      cpSync(mounts.claude, path.join(runDir, RAW.agentConfig), { recursive: true });
-      cpSync(mounts.hooks, path.join(runDir, RAW.agentHooks), { recursive: true });
     }
     ctx.event({ type: 'agent_process', ...agent });
     // Agent 종료 기록이 남은 뒤의 예외는 Agent 관찰을 다시 뽑지 않도록 after_agent 다
@@ -324,6 +317,15 @@ export async function executeRun(spec: RunSpec, opts: RunOptions): Promise<RunOu
       readFileSync(path.join(runDir, RAW.agentStderr), 'utf8'),
       containerExit,
     );
+    if (inContainer) {
+      // 세션 · hook 기록 복사가 실패하면 after_agent 다. Agent 종료가 harness 원인으로 분류됐으면 그 분류를 남긴다
+      try {
+        cpSync(mounts.claude, path.join(runDir, RAW.agentConfig), { recursive: true });
+        cpSync(mounts.hooks, path.join(runDir, RAW.agentHooks), { recursive: true });
+      } catch (e) {
+        if (cls.state !== 'harness_failed') throw e;
+      }
+    }
     if (cls.state === 'harness_failed') throw new HarnessError(cls.stage, cls.reason);
     ctx.transition(cls.state);
 
@@ -364,6 +366,16 @@ function finish(runId: string, runDir: string, ctx: RunContext): RunOutcome {
   } catch (e) {
     return { runId, runDir, result: { run_id: runId, state: ctx.state, terminal: isTerminal(ctx.state), harness_failure: null, agent: null, build_error: e instanceof Error ? e.message : String(e) } };
   }
+}
+
+// 채점 컨테이너가 run.sh 를 실행하지 못했거나 외부 원인으로 끝난 경우. 묶음 판정이 아니라 harness 실패다(실행 계약 §6.3).
+// docker client 의 exit 125 · 126 · 127 만으로는 run.sh 자신의 종료 코드와 구분되지 않아 컨테이너 상태로 판단한다
+function gradingContainerProblem(c: SettledContainer | null, timedOut: boolean): string | null {
+  if (c === null) return null;
+  if (c.inspect_error !== null) return `docker inspect 에 Docker 가 답하지 않았다: ${c.inspect_error}`;
+  if (!c.found || !c.started || c.error !== '') return `채점 컨테이너가 run.sh 를 시작하지 못했다: ${c.error}`;
+  if (c.running_after_client && !timedOut) return 'docker client 가 끝났는데 채점 컨테이너가 실행 중이었다';
+  return null;
 }
 
 class Grader {
@@ -431,8 +443,11 @@ class Grader {
       graceMs: this.config.timeouts_ms.grace,
       clock: this.clock,
     });
-    // 시간 초과로 docker client 만 끝났으면 채점 컨테이너가 남는다
-    if (name !== null) await removeContainer(name);
+    let container: SettledContainer | null = null;
+    if (name !== null) {
+      container = await settleContainer(name, p.started_at, path.join(logDir, 'docker-events.jsonl'));
+      this.ctx.event({ type: 'container_exit', at: this.ctx.now(), role: 'grading', name, ...container });
+    }
     this.lastTimedOut = p.timed_out;
     this.ctx.event({ type: 'grading_process', kind, suite, round: this.round, try: attempt, log_dir: logRel, skip_build: skipBuild, env, ...p });
     let junit = null;
@@ -441,7 +456,7 @@ class Grader {
     } catch {
       junit = null;
     }
-    return { p, status: suiteStatus(p.exit_code, p.timed_out, junit) };
+    return { p, problem: gradingContainerProblem(container, p.timed_out), status: suiteStatus(p.exit_code, p.timed_out, junit) };
   }
 
   // 판정 묶음. 결과를 내지 못한 경우(port 사용 중, run.sh 시작 실패, 외부 signal 로 중단, 잠자기)는 harness 실패다.
@@ -454,6 +469,7 @@ class Grader {
       if (this.containerRunId === null && !(await portFree(this.port))) throw new HarnessError('after_agent', `채점 port ${this.port} 를 이미 쓰고 있다`);
       const r = await this.invoke('normative', suite, attempt, this.config.timeouts_ms.grading_normative);
       if (r.p.spawn_error !== null) throw new HarnessError('after_agent', `run.sh 를 시작하지 못했다: ${r.p.spawn_error}`);
+      if (r.problem !== null) throw new HarnessError('after_agent', r.problem);
       if (r.p.suspended) throw new HarnessError('after_agent', `host 잠자기 감지(채점 ${suite})`);
       if (!r.p.timed_out && (r.p.signal !== null || (r.p.exit_code !== null && INTERRUPTED_EXIT.includes(r.p.exit_code)))) {
         throw new HarnessError('after_agent', `run.sh 가 외부 signal 로 중단됐다(exit ${r.p.exit_code}, signal ${r.p.signal})`);
@@ -469,6 +485,7 @@ class Grader {
     try {
       if (this.containerRunId === null && !(await portFree(this.port))) throw new Error(`채점 port ${this.port} 를 이미 쓰고 있다`);
       const r = await this.invoke('diagnostic', suite, 1, this.config.timeouts_ms.grading_diagnostic);
+      if (r.problem !== null) throw new Error(r.problem);
       this.ctx.event({ type: 'suite_result', at: this.ctx.now(), kind: 'diagnostic', suite, round: this.round, status: r.status });
     } catch (e) {
       this.ctx.event({ type: 'grading_error', at: this.ctx.now(), kind: 'diagnostic', suite, round: this.round, message: e instanceof Error ? e.message : String(e) });
@@ -488,14 +505,25 @@ interface RetryView {
   agent: { outcome: string | null; error_kind: string | null } | null;
 }
 
-// 실행 계약 §7: 새 attempt 가 필요한 결과인지. API 오류를 먼저 본다. 비종료 상태로 남은 실행은 §6.2 의 stage 로 판정한다
-export function needsNewAttempt(result: RetryView): boolean {
-  if (result.agent?.outcome === 'agent_failed' && (result.agent.error_kind === 'api_error' || result.agent.error_kind === 'usage_limit')) return true;
+// 실행 계약 §6.2: harness_failed 는 기록된 stage, 비종료 상태로 남은 실행은 마지막 상태로 정한 stage. completed 는 null
+function failureStage(result: RetryView): string | null {
+  if (result.state === 'harness_failed') return result.harness_failure?.stage ?? null;
+  if (result.terminal) return null;
   // running 에 남았어도 Agent 종료 기록이 Agent 관찰(성공 · 실패 · 시간 초과)로 분류되면 Agent 관찰은 끝났다
   const observed = ['agent_succeeded', 'agent_failed', 'timed_out'].includes(result.agent?.outcome ?? '');
-  const abandoned = result.state === 'running' && observed ? 'after_agent' : stageOfAbandoned(result.state);
-  const stage = result.state === 'harness_failed' ? result.harness_failure?.stage : !result.terminal ? abandoned : null;
+  return result.state === 'running' && observed ? 'after_agent' : stageOfAbandoned(result.state);
+}
+
+// 실행 계약 §7: 새 attempt 가 필요한 결과인지. API 오류를 먼저 본다
+export function needsNewAttempt(result: RetryView): boolean {
+  if (result.agent?.outcome === 'agent_failed' && (result.agent.error_kind === 'api_error' || result.agent.error_kind === 'usage_limit')) return true;
+  const stage = failureStage(result);
   return stage === 'prepare' || stage === 'agent_start' || stage === 'agent';
+}
+
+// 실행 계약 §7: 재채점 대상. 새 attempt 대상이 아니고 실패 단계가 after_agent 인 실행
+export function regradeEligible(result: RetryView): boolean {
+  return !needsNewAttempt(result) && failureStage(result) === 'after_agent';
 }
 
 // 같은 반복 번호를 재실행 규칙에 따라 최대 max_attempts 번 실행한다. 이전 attempt 의 디렉터리는 남긴다.
@@ -523,18 +551,15 @@ export async function executeWithRetry(
   return { runs, missing: true, usageLimited: false };
 }
 
-// 재채점(실행 계약 §7). harness_failed(after_agent) 이고 판정 결과가 없는 묶음만 다시 채점한다.
+// 재채점(실행 계약 §7). 실패 단계가 after_agent 이고(비종료 상태 포함) 판정 결과가 없는 묶음만 다시 채점한다.
 // Agent 관찰은 바꾸지 않으므로 상태는 그대로 두고 회차(round)를 붙인 채점 기록만 더한다. 실행마다 최대 2회
 export async function regradeRun(runDir: string, opts: { labRoot?: string; clock?: Clock } = {}): Promise<RunOutcome> {
   const labRoot = opts.labRoot ?? LAB_ROOT;
   const clock = opts.clock ?? systemClock;
   const run = JSON.parse(readFileSync(path.join(runDir, 'run.json'), 'utf8')) as RunJson;
-  const before = JSON.parse(buildResult(runDir)) as {
-    state: string; harness_failure: { stage: string | null } | null;
-    grading: { normative: { suite: string; status: string | null }[] };
-  };
-  if (before.state !== 'harness_failed' || before.harness_failure?.stage !== 'after_agent') {
-    throw new SpecError(`재채점 대상이 아니다: ${before.state} / ${before.harness_failure?.stage ?? '-'}`);
+  const before = JSON.parse(buildResult(runDir)) as RetryView & { grading: { normative: { suite: string; status: string | null }[] } };
+  if (!regradeEligible(before)) {
+    throw new SpecError(`재채점 대상이 아니다: ${before.state} / ${before.harness_failure?.stage ?? '-'} / ${before.agent?.error_kind ?? '-'}`);
   }
   // 회차는 재채점 시작 기록으로 센다. 채점 process 를 시작하지 못한 회차도 상한에 들어간다
   const round = readEvents(runDir).filter((e) => e.type === 'regrade').length + 1;
@@ -542,23 +567,29 @@ export async function regradeRun(runDir: string, opts: { labRoot?: string; clock
   const decided = new Set(before.grading.normative.filter((s) => s.status !== null).map((s) => s.suite));
   const pending = run.task.grading.normative.filter((s) => !decided.has(s));
   if (pending.length === 0) throw new SpecError('판정 결과가 없는 묶음이 없다');
-  // 채점 코드가 실험 잠금과 같아야 같은 기준의 채점이다
+  // 채점 코드가 실험 잠금과 같아야 같은 기준의 채점이다. 집계 실험은 첫 채점과 같이 lab/ 미commit 변경이 없어야 한다(실행 계약 §8.3)
   lockGradingCode(path.resolve(runDir, '../..'), { experiment: run.identity.experiment } as RunSpec, labRoot);
+  const changes = labChanges(labRoot);
+  if (/^exp[123]/.test(run.identity.experiment) && changes !== '') {
+    throw new SpecError(`집계 실험은 lab/ 에 미commit 변경이 없을 때만 재채점한다: ${changes === null ? 'git 상태를 확인하지 못했다' : changes.split('\n').join(', ')}`);
+  }
 
   const config = run.execution_config;
   const ctx = new RunContext(runDir, clock);
-  ctx.state = 'harness_failed';
+  ctx.state = before.state;
   ctx.stage = 'after_agent';
   ctx.event({ type: 'regrade', at: ctx.now(), round, suites: pending });
+  ctx.event({ type: 'harness_code', at: ctx.now(), when: `regrade-${round}`, head: git(labRoot, ['rev-parse', 'HEAD']), lab_changes: changes });
+  if (changes !== '') writeFileSync(path.join(runDir, `${RAW.harnessDiff}.regrade-${round}`), labChangeRecord(labRoot, changes));
   const step = (logDir: string): StepOptions => ({ logDir: path.join(runDir, logDir), gitHome: path.join(runDir, HARNESS_HOME), timeoutMs: config.timeouts_ms.prepare, graceMs: config.timeouts_ms.grace, clock });
   const patch = path.join(runDir, ARTIFACTS.patch);
   try {
     // 최종 diff 가 없으면(diff 생성 실패) 보존된 작업 디렉터리에서 먼저 다시 만든다
     if (!existsSync(patch)) {
-      await captureDiff(path.join(runDir, HARNESS_GIT), path.join(runDir, HARNESS_INDEX), path.join(runDir, WORKSPACE), run.source.commit, path.join(runDir, 'artifacts'), step(path.join(RAW.diffLog, `regrade-${round}`)));
+      await ctx.guarded('after_agent', () => captureDiff(path.join(runDir, HARNESS_GIT), path.join(runDir, HARNESS_INDEX), path.join(runDir, WORKSPACE), run.source.commit, path.join(runDir, 'artifacts'), step(path.join(RAW.diffLog, `regrade-${round}`))));
     }
     const gradingWs = path.join(runDir, gradingWorkspace(round));
-    await gradingCopy(run.source.repo, run.source.commit, patch, gradingWs, step(path.join(RAW.grading, `copy-${round}`)));
+    await ctx.guarded('after_agent', () => gradingCopy(run.source.repo, run.source.commit, patch, gradingWs, step(path.join(RAW.grading, `copy-${round}`))));
     const grader = new Grader(ctx, config, labRoot, gradingWs, run.resources.port, clock, config.environment.runtime === 'docker' ? `${run.run_id}-regrade` : null, round);
     for (const suite of pending) await grader.normative(suite);
   } catch (e) {

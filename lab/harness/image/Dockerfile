@@ -14,7 +14,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LC_ALL=ko_KR.UTF-8 \
     PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 
-# git: Agent 작업. iptables · ipset · dnsutils: egress 제한(실행 계약 §15.3). fonts-noto-cjk: 한글 고정 글꼴
+# git: Agent 작업. iptables · ipset · dnsutils: egress 제한(설계 §15.3). fonts-noto-cjk: 한글 고정 글꼴
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       ca-certificates curl git xz-utils locales tzdata jq \

@@ -31,9 +31,10 @@
   },
   "environment": {
     "runtime": "docker",
-    "image": "sha256:ea03f9418cfc1afe95e4682298854c26407b8376e8b75dfed44fdbe4b789e8ff",
+    "image": "sha256:8388f6148672568aa5203dd3c69f52d3d114258cce2eefec9f08e35824da7b99",
     "platform": "linux/arm64",
     "cpus": 4,
-    "memory": "8g"
+    "memory": "8g",
+    "grading_network": "bridge"
   }
 }

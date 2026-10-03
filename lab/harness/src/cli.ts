@@ -20,6 +20,24 @@ function loadToken(): void {
   if (existsSync(TOKEN_FILE)) process.env.CLAUDE_CODE_OAUTH_TOKEN = readFileSync(TOKEN_FILE, 'utf8').trim();
 }
 
+function usage(message: string): never {
+  console.error(message);
+  process.exit(2);
+}
+
+// 이어서 실행(실행 계약 §7) 인자. 셋을 함께 주고, 다음 attempt 는 2 이상, 이미 센 attempt 는 0 이상 attempt 미만이다
+function resumeArgs(v: { 'resume-attempt'?: string; 'resume-retry-of'?: string; 'resume-counted'?: string }) {
+  const given = [v['resume-attempt'], v['resume-retry-of'], v['resume-counted']].filter((x) => x !== undefined).length;
+  if (given === 0) return null;
+  if (given !== 3) usage('--resume-attempt, --resume-retry-of, --resume-counted 는 함께 준다');
+  const attempt = Number(v['resume-attempt']);
+  const counted = Number(v['resume-counted']);
+  if (!Number.isInteger(attempt) || attempt < 2) usage(`--resume-attempt 는 2 이상의 정수다: ${v['resume-attempt']}`);
+  if (!Number.isInteger(counted) || counted < 0 || counted >= attempt) usage(`--resume-counted 는 0 이상 attempt 미만의 정수다: ${v['resume-counted']}`);
+  if (!/^\d{8}T\d{6}Z-[0-9a-f]{6}$/.test(v['resume-retry-of']!)) usage(`--resume-retry-of 는 실행 ID 다: ${v['resume-retry-of']}`);
+  return { attempt, retryOf: v['resume-retry-of']!, counted };
+}
+
 // macOS 에서 실행 중 잠자기를 막는다(실행 계약 §4.1). 이 process 가 끝나면 caffeinate 도 끝난다
 function keepAwake(): void {
   if (process.platform !== 'darwin') return;
@@ -41,11 +59,10 @@ async function main(): Promise<void> {
     },
   });
   if (command === 'run') {
+    const resume = resumeArgs(values);
     loadToken();
+    if (!process.env.CLAUDE_CODE_OAUTH_TOKEN) usage(`구독 token 이 없다. ${TOKEN_FILE} 를 만든다(실행 계약 §4.4)`);
     keepAwake();
-    const resume = values['resume-attempt'] === undefined ? null : {
-      attempt: Number(values['resume-attempt']), retryOf: values['resume-retry-of'] ?? '', counted: Number(values['resume-counted'] ?? '0'),
-    };
     const out = await executeWithRetry({
       experiment: values.experiment ?? '', task: values.task ?? '', variant: values.variant ?? '', repetition: Number(values.repetition),
       source: { repo: path.resolve(values['source-repo'] ?? ''), commit: values['source-commit'] ?? '' }, port: Number(values.port),

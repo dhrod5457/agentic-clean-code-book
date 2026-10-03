@@ -3,7 +3,7 @@ import { hostname, loadavg, release, type as osType, arch } from 'node:os';
 import { sha256 } from './config.ts';
 
 // environment fingerprint. 기준은 실행 계약 §9.1.
-// 실행 단계에서는 probe 가 Agent 컨테이너 안에서 명령을 실행한다. 3단계 골격은 harness 기계에서 실행한다
+// docker 실행에서는 probe 가 Agent 와 같은 이미지의 별도 컨테이너에서 명령을 실행한다. local 실행은 harness 기계에서 실행한다
 
 export interface ProbeResult {
   exit_code: number | null;
@@ -57,12 +57,25 @@ export interface RawFingerprint {
     machine_id: string;
     load_avg_1m: number;
     node_version: string;
+    // docker 실행일 때 Docker Engine · Desktop 버전과 VM 의 kernel · CPU · 메모리. 읽지 못하면 오류 문구
+    docker: { desktop: string | null; engine: string; kernel: string; os: string; cpus: number; memory_bytes: number } | { error: string } | null;
   };
   harness: { commit: string | null; lab_dirty: boolean | null };
   agent_env: Record<Tool, ProbeResult & { argv: string[] }>;
 }
 
-export async function collectFingerprint(probe: Probe, claudeExecutable: string, labRoot: string): Promise<RawFingerprint> {
+function dockerHost(): RawFingerprint['host']['docker'] {
+  try {
+    const run = (args: string[]) => execFileSync('docker', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20_000 });
+    const info = JSON.parse(run(['info', '--format', '{{json .}}'])) as { ServerVersion: string; KernelVersion: string; OperatingSystem: string; NCPU: number; MemTotal: number };
+    const platform = JSON.parse(run(['version', '--format', '{{json .Server.Platform}}'])) as { Name?: string } | null;
+    return { desktop: platform?.Name ?? null, engine: info.ServerVersion, kernel: info.KernelVersion, os: info.OperatingSystem, cpus: info.NCPU, memory_bytes: info.MemTotal };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function collectFingerprint(probe: Probe, claudeExecutable: string, labRoot: string, docker = false): Promise<RawFingerprint> {
   const tools = {} as RawFingerprint['agent_env'];
   for (const tool of TOOLS) {
     const argv = toolArgv(tool, claudeExecutable);
@@ -77,6 +90,7 @@ export async function collectFingerprint(probe: Probe, claudeExecutable: string,
       machine_id: sha256(hostname()).slice(0, 12),
       load_avg_1m: Math.round(loadavg()[0] * 100) / 100,
       node_version: process.version,
+      docker: docker ? dockerHost() : null,
     },
     harness: { commit: git(labRoot, ['rev-parse', 'HEAD']), lab_dirty: changes === null ? null : changes !== '' },
     agent_env: tools,

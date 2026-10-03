@@ -259,6 +259,20 @@ test('없는 source commit 이면 준비 단계에서 harness_failed(prepare) �
   assert.equal(existsSync(f.argvFile), false);
 });
 
+test('clone 한 작업 디렉터리에 지침 파일(하위 디렉터리 포함)이 있으면 Agent 를 실행하지 않고 harness_failed(prepare) 다', async () => {
+  const f = fixture(AGENT_OK);
+  const git = (...a: string[]) => execFileSync('git', ['-C', f.source.repo, ...a], { encoding: 'utf8' }).trim();
+  mkdirSync(path.join(f.source.repo, 'backend'));
+  writeFileSync(path.join(f.source.repo, 'backend/CLAUDE.md'), 'rules\n');
+  git('add', '-A');
+  git('-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '--quiet', '-m', 'guide', '--', 'backend');
+  const { result } = await executeRun(f.spec({ source: { repo: f.source.repo, commit: git('rev-parse', 'HEAD') } }), f.opts);
+  assert.equal(result.state, 'harness_failed');
+  assert.equal(result.harness_failure.stage, 'prepare');
+  assert.match(result.harness_failure.reason, /backend\/CLAUDE\.md/);
+  assert.equal(existsSync(f.argvFile), false, 'Agent 가 실행되면 안 된다');
+});
+
 test('준비 중 host 잠자기가 감지되면 harness_failed(prepare) 이고 새 attempt 대상이다', async () => {
   const f = fixture(AGENT_OK);
   let calls = 0;
@@ -526,4 +540,46 @@ test('재채점은 harness_failed(after_agent) 실행에만 하고 회차 2 를 
   await regradeRun(runDir, { labRoot: f.labRoot });
   server.close();
   await assert.rejects(regradeRun(runDir, { labRoot: f.labRoot }), /최대 2회/);
+});
+
+// 판정 채점 port 를 막아 harness_failed(after_agent) 로 끝난 실행을 만든다
+async function gradingBlocked(f: ReturnType<typeof fixture>, over: Parameters<typeof f.spec>[0] = {}) {
+  const { createServer } = await import('node:net');
+  const server = createServer();
+  await new Promise<void>((r) => server.listen(f.spec().port, r));
+  const run = await executeRun(f.spec(over), f.opts);
+  server.close();
+  return run;
+}
+
+test('harness 가 강제 종료돼 Agent 이후 비종료 상태로 남은 실행은 재채점하고, 새 attempt 대상(API 오류)은 재채점하지 않는다', async () => {
+  const f = fixture(AGENT_OK);
+  const { runDir } = await gradingBlocked(f);
+  // harness 가 채점 중에 죽은 것처럼 마지막 상태 기록(harness_failed)을 지운다
+  const events = readFileSync(path.join(runDir, RAW.events), 'utf8').trim().split('\n');
+  writeFileSync(path.join(runDir, RAW.events), `${events.filter((l) => !l.includes('"to":"harness_failed"')).join('\n')}\n`);
+  const { result } = await regradeRun(runDir, { labRoot: f.labRoot });
+  assert.equal(result.state, 'agent_succeeded');
+  assert.equal(result.grading.outcome, 'passed');
+
+  const api = fixture(API_ERROR);
+  const { runDir: apiRun, result: apiResult } = await gradingBlocked(api);
+  assert.equal(apiResult.agent.error_kind, 'api_error');
+  await assert.rejects(regradeRun(apiRun, { labRoot: api.labRoot }), /재채점 대상이 아니다/);
+});
+
+test('재채점은 집계 실험에서 lab/ 미commit 변경이 있으면 거부하고, 실행할 때는 harness 코드 상태를 회차와 함께 남긴다', async () => {
+  const f = fixture(AGENT_OK);
+  const { runDir } = await gradingBlocked(f);
+  writeFileSync(path.join(f.labRoot, 'lab', 'run.sh'), 'changed\n');
+  await assert.rejects(regradeRun(runDir, { labRoot: f.labRoot }), /미commit 변경/);
+  assert.equal(readFileSync(path.join(runDir, RAW.events), 'utf8').includes('"type":"regrade"'), false);
+
+  const pilot = fixture(AGENT_OK);
+  const { runDir: pilotRun } = await gradingBlocked(pilot, { experiment: 'pilot-1' });
+  writeFileSync(path.join(pilot.labRoot, 'lab', 'run.sh'), 'changed\n');
+  await regradeRun(pilotRun, { labRoot: pilot.labRoot });
+  const codes = readFileSync(path.join(pilotRun, RAW.events), 'utf8').trim().split('\n').map((l) => JSON.parse(l)).filter((e) => e.type === 'harness_code');
+  assert.deepEqual(codes.map((e) => e.when), ['start', 'before_grading', 'regrade-1']);
+  assert.match(codes[2].lab_changes, /lab\/run\.sh/);
 });

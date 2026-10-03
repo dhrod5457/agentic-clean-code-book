@@ -1,7 +1,7 @@
 # 실험 실행 계약 v0.1
 
 작성일: 2026-10-03
-상태: **REVIEWED** (2026-10-03). 구독 token 전달 방식을 파일로 바꿨다(§4.4). 컨테이너 단계 변경과 함께 재검토한다.
+상태: **REVIEWED** (2026-10-03). 컨테이너 단계 독립 검토(§12 9차)의 지적을 반영했다. 재확인 뒤 FROZEN 여부를 정한다.
 기준 설계: `_design/experiment-codebase-design-v0.1.md` (이하 "설계")
 
 이 문서는 설계 §19.2 의 Phase 0B 결정과, A/B 실행에서 Variant 이외의 조건을 고정하는 방법을 정한다.
@@ -77,6 +77,7 @@ Agent 환경 변수 허용 목록:
 - 컨테이너 단계에서 더하는 값: `GRADLE_USER_HOME`, `GRADLE_RO_DEP_CACHE`, `PLAYWRIGHT_BROWSERS_PATH`(설계 §15.2)
 - 실행자 쪽에서 넘기는 값: `CLAUDE_CODE_OAUTH_TOKEN` 뿐이다. harness 가 token 파일에서 읽는다(§4.4). `ANTHROPIC_API_KEY` 는 넘기지 않는다
 - `PATH` 와 `HOME=/home/agent` 는 이미지 값을 쓴다. 3단계 host 골격만 실행자의 `PATH` · `HOME` 을 넘긴다
+- 이미지 ENV 도 Agent 에 들어간다: `PATH`, `JAVA_HOME=/opt/java/openjdk`, `JAVA_VERSION`, `LANG=ko_KR.UTF-8`, `LANGUAGE=en_US:en`, `LC_ALL=ko_KR.UTF-8`, `TZ=Asia/Seoul`, `DEBIAN_FRONTEND=noninteractive`, `PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright`. 이미지 id 가 실행 조건 hash 에 들어가므로 두 Variant 에 같다
 
 `WebSearch` · `WebFetch` 를 빼는 이유: 이 연구 저장소는 GitHub 에 공개돼 있고(`dhrod5457/agentic-clean-code-book`, PUBLIC) 설계와 숨김 채점이 들어 있다. `WebSearch` 는 Anthropic 서버에서 실행되므로 컨테이너 egress 제한으로 막히지 않는다. 두 Variant 에 같게 적용한다.
 
@@ -101,7 +102,8 @@ Agent 환경 변수 허용 목록:
 
 ## 4.2 컨테이너와 동시 실행
 
-- 컨테이너는 root 와 `NET_ADMIN` · `NET_RAW` capability 로 시작한다. 이미지의 시작 스크립트(`/usr/local/sbin/start.sh`)가 외부 통신을 DNS · loopback · `api.anthropic.com` 의 443 port 로 제한하고, 모든 capability 를 버린 뒤 `agent`(uid 1000) 로 명령을 실행한다. Agent 는 규칙을 바꿀 수 없다. 공식 dev container 의 `init-firewall.sh` 와 달리 host 네트워크 · SSH · npm · GitHub 을 허용하지 않는다
+- 컨테이너는 root 와 `NET_ADMIN` · `NET_RAW` capability 로 시작한다. 이미지의 시작 스크립트(`/usr/local/sbin/start.sh`)가 외부 통신을 loopback, `/etc/resolv.conf` 의 resolver 로 가는 DNS, `api.anthropic.com` 의 443 port 로 제한하고, 모든 capability 를 버린 뒤 `agent`(uid 1000) 로 명령을 실행한다. Agent 는 규칙을 바꿀 수 없다. 공식 dev container 의 `init-firewall.sh` 와 달리 host 네트워크 · SSH · npm · GitHub 을 허용하지 않는다
+- 시작 스크립트가 제한을 설정하지 못하면(resolver 없음, `api.anthropic.com` 이름 해석 실패, iptables 오류) 명령을 실행하지 않고 exit 90 으로 끝난다. harness 는 컨테이너 exit 90 이고 stdout 에 stream 이 없으면 `harness_failed(agent_start)` 로 기록한다(§6.3)
 - 실행 1개는 준비부터 채점까지 동시 실행 자리 하나를 쓴다. Agent 컨테이너와 채점 컨테이너는 모두 CPU 4개, 메모리 8GB, non-root 사용자(설계 §15.2)이고 한 실행 안에서 순서대로 실행한다. CPU · 메모리 제한은 실행 설정 파일의 `environment` 에 있어 실행 조건 hash 에 포함된다
 - 실험 1 · 3: 한 번에 1개(설계 §14.6)
 - 실험 2: 한 회의 8개 실행을 같은 기준 commit 에서 2개씩 실행한다. 실행마다 별도 clone 과 별도 컨테이너를 쓰고 서로의 작업을 볼 수 없으므로, 동시 실행 수는 쌍별 3-way merge 결과에 영향을 주지 않는다. 동시 8개는 32 CPU · 64GB 가 필요해 이 기계에서 실행할 수 없다
@@ -115,24 +117,27 @@ Agent 환경 변수 허용 목록:
 |---|---|---|
 | `/work/shop-admin` | `runs/<run_id>/workspace/shop-admin` | 가능 |
 | `/home/agent/.claude` (`CLAUDE_CONFIG_DIR`) | 실행마다 새로 만든 빈 디렉터리. 실행이 끝나면 harness 가 `raw/agent/claude-config/` 로 복사 | 가능 |
-| `/home/agent/hooks-out` | 실행마다 새로 만든 빈 디렉터리. 실행이 끝나면 `raw/agent/hooks/` 로 복사 | 가능 |
+| `/opt/cc-out` | 실행마다 새로 만든 빈 디렉터리. 실행이 끝나면 `raw/agent/hooks/` 로 복사 | 가능 |
 | `/opt/cc/` | harness 설정 · hook 스크립트(`lab/harness/config/` 의 해당 파일만) | 읽기 전용 |
 
-hook 이 복사하는 시험 산출물(설계 §14.3 의 `artifacts/test-<순번>/`)은 `/home/agent/hooks-out/artifacts/` 에 쓰고 `raw/agent/hooks/artifacts/` 로 복사한다.
+hook 이 복사하는 시험 산출물(설계 §14.3 의 `artifacts/test-<순번>/`)은 `/opt/cc-out/artifacts/` 에 쓰고 `raw/agent/hooks/artifacts/` 로 복사한다.
+hook 은 Agent 와 같은 `agent` 사용자로 실행되므로 Agent 가 `/opt/cc-out` 의 기록을 바꿀 수 있다. HOME 밖에 두어 Agent 가 홈 디렉터리를 볼 때 드러나지 않게 했을 뿐 막지는 않는다(확인한 한계). stream 원본(`raw/agent/stdout.jsonl`)은 harness 가 컨테이너 밖에서 받으므로 Agent 가 바꿀 수 없다.
 Gradle 읽기 전용 cache(`GRADLE_RO_DEP_CACHE`)와 Playwright 브라우저는 host 연결이 아니라 이미지 안 경로다. root 소유로 두어 non-root Agent 가 쓸 수 없다.
 
 - `run.json`, `result.json`, `raw/`, `artifacts/`, 다른 실행의 디렉터리, 이 저장소는 연결하지 않는다
-- bind mount 의 host 원본 경로는 컨테이너 안 `/proc/self/mountinfo` 에 그대로 보인다(2026-10-03 확인). 그래서 연결하는 host 경로는 모두 실행 디렉터리 아래에 둔다. settings · hook 파일도 저장소 경로를 연결하지 않고 `runs/<run_id>/container/cc/` 로 복사해 `/opt/cc` 에 연결한다. `docker` 실행에서 결과 root 경로에 금지 문자열이 있으면 harness 가 시작하지 않는다
-- 채점 컨테이너는 Agent 컨테이너와 같은 이미지를 `agent` 사용자로 실행하고, 채점용 복사본 · `lab/grading`(읽기 전용) · 채점 로그 디렉터리를 연결한다. Agent 가 볼 수 없으므로 연결 경로 제한을 적용하지 않는다. 의존성 cache 층이 생기는 체크리스트 7단계 전까지는 Variant build 를 위해 네트워크를 연다
+- bind mount 의 host 원본 경로는 컨테이너 안 `/proc/self/mountinfo` 에 symlink 를 푼 실제 경로로 보인다(2026-10-03 확인). 그래서 연결하는 host 경로는 모두 실행 디렉터리 아래에 둔다. settings · hook 파일도 저장소 경로를 연결하지 않고 `runs/<run_id>/container/cc/` 로 복사해 `/opt/cc` 에 연결한다. `docker` 실행에서 결과 root 의 실제 경로(`realpath`)에 금지 문자열이 있으면 harness 가 시작하지 않는다. 실제 경로에는 실행자 사용자 이름과 `lab-runs/v0.1/runs/<run_id>` 가 보이며, 금지 문자열은 아니다
+- 채점 컨테이너는 Agent 컨테이너와 같은 이미지를 `agent` 사용자로 실행하고, 채점용 복사본 · `lab/grading`(읽기 전용) · 채점 로그 디렉터리를 연결한다. Agent 가 볼 수 없으므로 연결 경로 제한을 적용하지 않는다. 네트워크는 실행 설정의 `environment.grading_network` 로 정하고 실행 조건 hash 에 들어간다. 의존성 cache 층이 생기는 체크리스트 7단계 전까지는 Variant build 를 위해 `bridge` 이고, 7단계에서 `none` 으로 바꾸며 `run.sh` 의 offline build 와 Gradle cache 환경 변수를 함께 정한다
 - 컨테이너 이름과 hostname 은 `r-<run_id>` 다. 이미지 · 설정 · hook 파일 이름 · 경로 · 내용(주석 포함)에 실험 · Variant 를 나타내는 문자열을 쓰지 않는다
 - 3단계 컨테이너 항목의 완료 조건으로, 컨테이너 안에서 환경 변수 · 연결 경로 · hostname · `/opt/cc/` 파일 내용에 `agentic`, `variant`, `실험`, `experiment`, Variant 코드가 없는지 검사한다
-- 3단계 골격은 컨테이너 없이 host 에서 가짜 Agent 로만 실행한다. 이 상태에서는 작업 디렉터리에서 실행 디렉터리를 읽을 수 있으므로 실제 Agent 를 실행하지 않는다
+- 실행 설정의 `environment.runtime` 이 `docker` 일 때만 실제 Agent 를 실행한다. `local` 은 컨테이너 없이 host 에서 가짜 Agent 로 orchestration 을 시험할 때만 쓴다. `local` 에서는 작업 디렉터리에서 실행 디렉터리를 읽을 수 있기 때문이다
+- 내보내기(설계 §15.1)와 준비 단계의 clone 직후에 하위 디렉터리를 포함해 `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `.claude/` 가 없는지 확인한다. clone 직후 검사에 걸리면 `harness_failed(prepare)` 다. 내보내기는 파일 내용(binary 포함)과 경로 이름에서 금지 문자열도 검사한다
 
 ## 4.4 인증
 
 - 사용자의 Claude Max 구독으로 실행한다. 실행 기계에서 `claude setup-token` 을 한 번 실행해 장기 인증 token(유효기간 1년)을 만들고, 저장소 밖 파일 `~/.config/agentic-lab/claude-oauth-token`(권한 600)에 둔다. harness 가 실행할 때만 이 파일을 읽어 Agent 컨테이너에 `CLAUDE_CODE_OAUTH_TOKEN` 으로 넘긴다. shell 시작 파일에 `export` 하지 않는다. 이 환경 변수는 `/login` 보다 우선해서 같은 기계의 다른 Claude Code 세션 인증까지 바꾸기 때문이다. 저장소, 이미지, 실행 설정 파일, `run.json`, fingerprint 에 값을 쓰지 않는다(https://code.claude.com/docs/en/authentication 「Generate a long-lived token」)
 - `CLAUDE_CODE_OAUTH_TOKEN` 보다 우선하는 인증 수단을 Agent 환경에 두지 않는다. 우선순위는 `CLAUDE_CODE_USE_BEDROCK` · `VERTEX` · `FOUNDRY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_API_KEY`, `apiKeyHelper`, `CLAUDE_CODE_OAUTH_TOKEN` 순이고, `-p` 실행에서는 `ANTHROPIC_API_KEY` 가 있으면 항상 그 key 로 인증된다(같은 문서 「Authentication precedence」)
-- 준비 단계에서 Agent 와 같은 환경 변수와 `--settings` 로 `claude auth status --json` 을 실행해 `authMethod` 가 `oauth_token` 인지 확인한다. 다르거나 token 이 없으면 `harness_failed(prepare)` 다. 이 명령은 모델을 호출하지 않는다. Agent 의 설정 디렉터리를 비워 두려고 별도의 빈 설정 디렉터리에서 실행하고, 컨테이너 단계에서는 이미지 환경 변수까지 반영되도록 Agent 컨테이너 안에서 실행한다
+- 준비 단계에서 Agent 와 같은 환경 변수와 `--settings` 로 `claude auth status --json` 을 실행해 `authMethod` 가 `oauth_token` 인지 확인한다. 다르거나 token 이 없으면 `harness_failed(prepare)` 다. 이 명령은 모델을 호출하지 않는다. Agent 의 설정 디렉터리를 비워 두려고 별도의 빈 설정 디렉터리에서 실행하고, `docker` 실행에서는 이미지 환경 변수까지 반영되도록 Agent 와 같은 이미지 · 환경 변수의 별도 컨테이너(`--network none`)에서 실행한다
+- 실행 명령(`pnpm lab run`)은 token 파일과 환경 변수 어디에도 token 이 없으면 실행 디렉터리를 만들지 않고 exit 2 로 끝난다. 준비 단계 인증 실패가 재실행 상한을 써 버려 반복이 결측되는 것을 막는다
 - **usage credits 를 끈다.** Max 구독은 사용 한도를 넘으면 usage credits 로 API 단가 과금을 이어갈 수 있고(기본값 꺼짐), 그때부터 prompt cache 수명이 1시간에서 5분으로 바뀐다(https://code.claude.com/docs/en/costs 「Why usage climbs」). 실험 도중 실행 조건이 바뀌므로, 실행자가 각 실험 시작 전 claude.ai Settings 의 Usage 에서 usage credits 가 꺼져 있는지 확인하고 확인 시각을 실험 기록에 남긴다
 - 구독 사용 한도는 이 계정을 쓰는 모든 세션이 함께 쓴다. 같은 계정의 다른 사용은 한도 도달 시점과 429 자동 재시도를 바꾼다. pilot 부터 실험 종료까지 실행이 진행되는 시간에는 같은 계정으로 다른 Claude 를 사용하지 않는다. 결과 보고에 Variant 별 `api_retries` 를 적는다
 - 사용 한도에 도달해 중단된 실행은 Agent 관찰이 아니다(§6.3). 한도가 풀리는 시각까지 다음 실행을 시작하지 않는다
@@ -149,7 +154,8 @@ Gradle 읽기 전용 cache(`GRADLE_RO_DEP_CACHE`)와 Playwright 브라우저는 
 | Claude Code | 2.1.287 | §2 |
 | 글꼴 · locale · TZ | 고정 글꼴, `ko_KR.UTF-8`, `Asia/Seoul` | 설계 §11.3 |
 
-- 이미지는 digest 로 고정하고 `lab/harness/image.lock` 에 기록한다(체크리스트 3단계). digest 는 실행 설정 파일의 `environment.image` 에 들어가 실행 조건 hash 에 포함된다
+- 이미지는 로컬 image id(`sha256:…`, registry digest 가 아니다)로 고정하고 `lab/harness/image.lock` 에 기록한다(체크리스트 3단계). id 는 실행 설정 파일의 `environment.image` 에 들어가 실행 조건 hash 에 포함된다
+- apt 패키지 버전을 고정하지 않으므로 같은 Dockerfile 로 다시 build 하면 id 가 달라진다. 실험 중에는 다시 build 하지 않는다. `docker save` 사본(gzip)과 sha256 을 `image.lock` 의 `saved` 에 기록하고, 이미지를 잃으면 그 사본을 `docker load` 한다. 사본은 결과 root 의 `images/` 에 두고 실험이 끝나면 원본 로그 archive 와 함께 보관한다
 - 숨김 채점은 Agent 컨테이너가 끝난 뒤 같은 이미지의 새 컨테이너에서 실행한다. host 의 Java · Node 버전이 채점 결과에 들어가지 않게 한다
 - harness 자체는 host 의 Node.js 로 실행한다. host runtime 은 Agent 조건이 아니므로 fingerprint 에 기록만 한다
 
@@ -223,22 +229,23 @@ USD 예산 대신 구독 사용 한도 안에서 실행한다. 아래 세션 수
 |---|---|---|
 | 작업 디렉터리 clone · checkout 실패, source commit 불일치 | `harness_failed` | `prepare` |
 | CLI 버전 불일치, 필수 도구(java, node, pnpm, claude) 없음 | `harness_failed` | `prepare` |
-| Agent 실행 파일을 시작하지 못함 | `harness_failed` | `agent_start` |
+| Agent 실행 파일을 시작하지 못함. Agent 컨테이너를 만들지 못함(inspect 결과 없음), 시작하지 못함(`State.Error`, 시작 시각 없음), 시작 스크립트가 외부 통신 제한을 설정하지 못함(컨테이너 exit 90 이고 stdout 에 stream 없음) | `harness_failed` | `agent_start` |
 | Agent exit 0, `result` 성공 | `agent_succeeded` | `result` 줄이 없으면 exit code 로만 판정하고 `result_missing` 을 기록 |
 | Agent exit ≠ 0 또는 오류 `result` | `agent_failed` | `error_kind`: `budget_exceeded`, `api_error`, `usage_limit`, `other` |
 | 구독 사용 한도 도달로 중단. 오류 result 의 `result` 문구나 stderr 줄이 `You've hit your <종류> limit` 으로 시작 | `agent_failed` | `error_kind = usage_limit`. Agent 관찰이 아니다. 한도가 풀린 뒤 같은 반복을 새 attempt 로 이어서 실행한다(§7) |
-| Agent 가 비정상 종료했고 컨테이너가 메모리 제한 초과로 종료됨(`docker inspect` 의 `State.OOMKilled`). Agent 가 exit 0 이면 이 행을 쓰지 않는다 | `agent_failed` | `error_kind = oom`. 메모리 제한은 실행 조건이므로 관찰 결과다 |
-| harness 가 보내지 않은 signal 로 종료했고 외부 원인 근거가 있음. 근거는 Docker daemon · VM 재시작 기록(`docker events`, `docker inspect` 의 `State.Error`)이나 잠자기 감지뿐이다 | `harness_failed` | `agent` |
+| Agent 가 비정상 종료했고 `docker inspect` 의 `State.OOMKilled` 가 참. 이 값은 컨테이너 안 어느 process(Agent 의 Bash 가 실행한 gradle 같은 자식 포함)가 메모리 제한으로 죽어도 참이 된다. Agent 가 exit 0 이면 이 행을 쓰지 않는다. 오류 result 가 `usage_limit` · `api_error` · `budget_exceeded` 로 판정되면 그 분류를 먼저 쓴다 | `agent_failed` | `error_kind = oom`. 메모리 제한은 실행 조건이므로 관찰 결과다 |
+| 외부 원인 근거가 있는 종료. 근거는 셋뿐이다: harness 시간 초과가 아닌데 docker client 가 끝난 뒤에도 컨테이너가 실행 중이었음, `docker inspect` 에 Docker 가 3번 모두 답하지 않음("없는 컨테이너" 응답은 제외), 잠자기 감지 | `harness_failed` | `agent` |
 | harness 가 보내지 않은 signal 로 종료했고 외부 원인 근거가 없음 | `agent_failed` | `error_kind = signal`. Agent 가 Bash 로 보낸 signal 일 수 있어 관찰 결과로 본다. 마지막 Bash 명령을 함께 기록 |
+| 컨테이너 기록 | 상태에 영향 없음 | Agent · 채점 컨테이너마다 `docker inspect` 종료 상태(`container_exit`)와 그 컨테이너의 `docker events`(die · oom · kill 등)를 원본에 남긴다. Docker Desktop VM 재시작은 위 세 근거로 잡히지 않을 수 있다. VM 재시작은 자동 갱신을 끄는 것으로 막고(§4.1), §7 의 `other` · `signal` 확인 때 이 기록과 Docker Desktop 로그를 함께 본다 |
 | 잠자기 감지: 한 단계의 wall 시각 경과와 monotonic 경과의 차이가 60초 초과 | `harness_failed` | 준비는 `prepare`, Agent 는 `agent`, diff · 채점 · 정리는 `after_agent` |
 | 45분 초과 | `timed_out` | harness 가 종료한 경우만 |
-| 최종 diff 생성 실패 | `harness_failed` | `after_agent` |
+| 최종 diff 생성 실패, Agent 종료 뒤 세션 · hook 기록 복사 실패 | `harness_failed` | `after_agent`. 복사는 Agent 종료 기록(`agent_process`)과 분류 뒤에 한다. Agent 종료가 harness 원인으로 분류됐으면 그 `stage` 를 쓴다 |
 | 판정 묶음 exit 0, JUnit 실패 0, 시험 1개 이상 | 묶음 `passed` | |
 | 판정 묶음 JUnit 에 실패 1개 이상 | 묶음 `failed` | |
 | 판정 묶음 exit ≠ 0 이고 JUnit 이 없거나, 읽을 수 없거나, 시험이 0개 | 묶음 `error` | Variant build 실패 · 애플리케이션 시작 실패. Agent 변경이 원인일 수 있어 채점 실패로 본다 |
 | 판정 묶음 exit 0 인데 JUnit 이 없거나 시험이 0개 | 묶음 `error` | |
 | 판정 묶음 30분 초과 | 같은 산출물로 그 묶음을 1회 다시 실행하고, 다시 초과하면 묶음 `timed_out` | 채점 실패로 본다. 기준 commit 은 시간 안에 채점되는 것을 실험 전에 확인하므로, 반복 초과는 Agent 변경(build 정지 같은)이 원인일 가능성이 높다. 같은 산출물을 다시 보는 것이라 Agent 결과를 다시 뽑지 않는다 |
-| 판정 채점 port 사전 확인 실패, `run.sh` 시작 실패, harness 시간 초과가 아닌데 `run.sh` 가 exit 130(INT · TERM trap)이나 signal 로 끝남(외부 중단), Agent 실행 중 harness 저장소의 commit · `lab/` 변경이 바뀜 | `harness_failed` | `after_agent`. 채점이 결과를 내지 못했다 |
+| 판정 채점 port 사전 확인 실패, `run.sh` 시작 실패(채점 컨테이너가 없거나 `State.Error` 가 있거나 시작 시각이 없음), harness 시간 초과가 아닌데 `run.sh` 가 exit 130(INT · TERM trap)이나 signal 로 끝남 또는 docker client 가 끝난 뒤 채점 컨테이너가 실행 중이었음(외부 중단), 채점 컨테이너 `docker inspect` 무응답, Agent 실행 중 harness 저장소의 commit · `lab/` 변경이 바뀜 | `harness_failed` | `after_agent`. 채점이 결과를 내지 못했다. docker client 의 exit 125 · 126 · 127 은 `run.sh` 자신의 종료 코드와 구분되지 않으므로 종료 코드가 아니라 컨테이너 상태로 판단한다 |
 | `run.sh` 가 exit 137 · 143 으로 끝남 | 묶음 `error` | `set -e` 인 `run.sh` 에서 build 자식(gradlew, pnpm)이 signal 로 죽은 경우다. 메모리 제한 안의 build 실패처럼 Agent 변경이 원인일 수 있어 채점 실패로 본다 |
 | 판정 묶음의 판정 기록 | harness 가 묶음 판정을 정한 경우에만 남긴다 | 판정 기록이 없는 묶음은 결과 없음(채점 결측)이다. 판정 묶음 중 하나라도 결과가 없으면 `grading.outcome` 은 정하지 않는다 |
 | 진단 묶음의 결과와 진단 단계의 모든 예외 | 상태에 영향 없음 | `result.json` 의 `grading.diagnostic` 에 기록만 한다 |
@@ -290,7 +297,9 @@ USD 예산 대신 구독 사용 한도 안에서 실행한다. 아래 세션 수
 - 실험이 끝날 때까지 이어서 실행하지 못해 마지막 attempt 가 `usage_limit` 인 반복은 결측이다
 - 분석 전에 `error_kind = other` 로 끝난 모든 실행의 result 문구와 stderr 를 사람이 확인해, 한도 · API 오류가 Agent 관찰로 잘못 분류된 실행이 없는지 본다
 - 재채점은 Agent 관찰을 바꾸지 않으므로 attempt 를 늘리지 않는다. 재채점 결과는 원래 실행 디렉터리 안에 따로 기록한다. 재채점 기능은 pilot 전에 구현한다(체크리스트 3단계)
+- 재채점 대상 실행: 위 판정 순서로 새 attempt 대상이 아니고, 실패 단계가 `after_agent` 인 실행이다. `harness_failed(after_agent)` 와, harness 가 강제 종료돼 §6.2 규칙으로 `after_agent` 가 된 비종료 상태 실행을 모두 포함한다. `api_error` · `usage_limit` 실행은 새 attempt 대상이므로 재채점하지 않는다
 - 재채점 대상은 결과가 기록되지 않은 판정 묶음이다. 이미 결과가 기록된 판정 묶음은 그 뒤에 harness 예외가 나도 기록된 결과를 쓴다
+- 재채점에도 §8.3 의 harness 코드 규칙을 쓴다. 집계 실험은 `lab/` 에 미commit 변경이 있으면 재채점을 시작하지 않는다. 회차마다 harness 코드 상태를 `harness_code`(`when = regrade-<회차>`)로 남기고, pilot · 보정 실행의 미commit 변경은 `raw/harness-lab.diff.regrade-<회차>` 에 남긴다
 - 재채점도 첫 채점과 같이 source commit 을 새로 clone 하고 `final.patch` 를 적용한 복사본으로 한다(§6.2). `final.patch` 가 없으면(최종 diff 생성 실패) 보존된 작업 디렉터리에서 diff 를 먼저 다시 만든다
 - 실행 하나에 재채점은 최대 2회다. 2회 모두 판정 결과를 내지 못하면 채점 결측으로 기록한다
 - 이전 attempt 의 실행 디렉터리는 지우지 않는다. 분석은 실행 입력 hash(§8.3)마다 마지막 attempt 를 쓰고, 결과 보고에 Variant 별 재실행 · 재채점 수와 원인을 적는다
@@ -337,7 +346,7 @@ USD 예산 대신 구독 사용 한도 안에서 실행한다. 아래 세션 수
     raw/                                 원본. 만든 그대로 둔다
       events.jsonl                       harness 기록(실행 시작, 상태 전이, process 종료, 채점 판정, harness 코드 상태, 오류)
       fingerprint.json                   환경 확인 명령의 출력
-      harness-lab.diff                   lab/ 미commit 변경(pilot · 보정 실행만)
+      harness-lab.diff                   lab/ 미commit 변경(pilot · 보정 실행만). 재채점 회차의 변경은 harness-lab.diff.regrade-<round>
       prepare/                           clone 로그
       diff/                              최종 diff 생성 로그
       agent/invocation.json              Agent 실행 파일, 인자, 환경 변수 이름
@@ -346,8 +355,9 @@ USD 예산 대신 구독 사용 한도 안에서 실행한다. 아래 세션 수
       agent/stderr.log
       agent/claude-config/               세션 기록(transcript) 복사본
       agent/hooks/                       hook 기록(hooks.jsonl)과 시험 산출물 복사본(artifacts/test-<순번>/)
+      agent/docker-events.jsonl          Agent 컨테이너의 docker events
       grading/copy-<round>/              채점용 복사본 생성 로그
-      grading/<묶음>/<round>-<try>/      run.sh 의 GRADING_LOG_DIR(JUnit, 애플리케이션 로그, Playwright 산출물)와 run.sh 출력
+      grading/<묶음>/<round>-<try>/      run.sh 의 GRADING_LOG_DIR(JUnit, 애플리케이션 로그, Playwright 산출물), run.sh 출력, 채점 컨테이너의 docker-events.jsonl
     artifacts/
       final.patch                        source commit 대비 최종 diff(새 파일 포함, binary 포함)
       diff-numstat.txt, diff-name-status.txt
@@ -399,17 +409,17 @@ USD 예산 대신 구독 사용 한도 안에서 실행한다. 아래 세션 수
 | diff 규모(추가 · 삭제 줄) | `git diff --numstat` | 구현 |
 | 채점 묶음별 결과(시험 수, 실패 수, 실패 시험 이름) | JUnit XML | 구현 |
 | environment fingerprint | §9.1 | 구현 |
-| OOM 종료 | `docker inspect` | 컨테이너 단계 |
+| 컨테이너 종료 상태(OOM, 종료 코드, client 종료 뒤 실행 중 여부), 컨테이너 events | `docker inspect`, `docker events` | 컨테이너 단계 |
 | 세션 기록 · hook 기록 · 시험 산출물 | 설계 §14.2, §14.3 | 컨테이너 단계 |
 
 ## 9.1 environment fingerprint
 
-host(harness 를 실행한 기계): OS 종류와 release, CPU 아키텍처, 익명 machine id(hostname 의 sha256 앞 12자리), load average(1분), harness 의 Node.js 버전.
+host(harness 를 실행한 기계): OS 종류와 release, CPU 아키텍처, 익명 machine id(hostname 의 sha256 앞 12자리), load average(1분), harness 의 Node.js 버전. `docker` 실행이면 Docker Desktop · Engine 버전과 VM 의 kernel · OS · CPU 수 · 메모리.
 harness: 저장소 commit SHA, `lab/` 미commit 변경 여부.
 Agent 환경: Java · Node.js · pnpm · Claude Code 버전(명령 출력 원문과 추출 값).
 실행 설정: source commit SHA, 모델, effort.
 fingerprint 는 clone 전에 남겨 준비 단계 실패 실행에도 기록이 있게 한다.
-실행 단계에서는 Agent 컨테이너 안에서 측정한다. 3단계 골격은 harness 가 실행되는 기계에서 측정한다.
+Agent 환경 값은 `docker` 실행에서 Agent 와 같은 이미지의 별도 컨테이너(`--network none`)에서 측정한다. `local` 실행은 harness 가 실행되는 기계에서 측정한다.
 
 ---
 
@@ -425,6 +435,7 @@ fingerprint 는 clone 전에 남겨 준비 단계 실패 실행에도 기록이 
 - 사용 한도 도달 시의 `api_error_status`, 오류 문구, 한도 해제 시각 표시 형식. pilot 10세션으로 한도에 닿지 않을 수 있으므로, 10단계 전에 한도에 닿은 상태에서 실행 1건을 일부러 시작해 실제 출력 형식이 `usage_limit` 로 분류되는지 확인한다
 - 인증 실패(401) · 권한 실패(403) 시의 `api_error_status` 와 종료 형식. 지금 규칙은 429 · 500 이상만 `api_error` 로 보고, 401 · 403 은 `other`(Agent 관찰)로 분류한다. 실행 환경 문제이므로 pilot 결과로 분류 규칙을 정한다
 - 사용자 전역 설정이 세션 기록에 나타나지 않는지(체크리스트 3단계 다음 단계 진입 조건)
+- 실패한 시험 명령에 `PostToolUseFailure` hook 이 실행돼 `hooks.jsonl` 에 사후 기록과 시험 결과 복사본이 남는지. Agent 가 `cd backend` 뒤 시험을 실행해도 복사되는지. hook 동작은 설치된 CLI 2.1.287 코드를 읽어 판단했고 실제 실행으로 확인하지 않았다
 
 확인한 한계: Agent process 가 시간 제한과 거의 같은 시각에 스스로 끝나면 `timed_out` 으로 기록될 수 있다. harness 는 시간 초과 판정을 timer 다음 check 단계로 미뤄, 그사이 처리된 exit 이 있으면 시간 초과로 보지 않는다. 같은 event loop 회차 안에서 끝난 경우는 남는다
 
@@ -447,6 +458,7 @@ fingerprint 는 clone 전에 남겨 준비 단계 실패 실행에도 기록이 
 | 2026-10-03 | 구독 token 을 shell 환경 변수 대신 저장소 밖 token 파일에서 harness 가 읽어 넘김. 2026-10-03 token 파일 생성(권한 600)과 `auth status` 의 `oauth_token` 확인, 사용자가 usage credits 를 끈 것으로 보고 | 사용자 설정 |
 | 2026-10-03 | 실행 이미지 build(`image.lock`, id `sha256:ea03f941…`)와 실행 설정 `environment.image` 기록, 컨테이너 시작 방식(root 로 egress 제한 후 agent 로 권한 낮춤) | 체크리스트 3단계 이미지 · egress 항목 |
 | 2026-10-03 | 컨테이너 실행 경로(연결 경로 · cc 사본 · 결과 root 경로 검사 · OOM · Docker 오류 판정), 채점 컨테이너, 기록용 hook, 재채점, 실행 명령, 내보내기 스크립트 | 체크리스트 3단계 나머지 항목 |
+| 2026-10-03 | 시작 스크립트 실패(exit 90) 분류와 DNS 를 resolver 로 한정(§4.2), hook 출력 위치 · 결과 root 실제 경로 · 채점 network 설정 · 지침 파일 검사(§4.3), 인증 확인 위치와 token 사전 확인(§4.4), image id 표기와 `docker save` 사본(§4.5), OOM 보다 구조화된 오류 우선, 외부 원인 근거 셋, 컨테이너 생성 · 시작 실패, 채점 컨테이너 시작 실패, 기록 복사 실패, 컨테이너 events 기록(§6.3), 재채점 대상과 harness 코드 규칙(§7), 이미지 ENV(§3), fingerprint 의 Docker 정보와 측정 위치(§9.1), pilot 확인 항목(§10) | 컨테이너 단계 독립 검토(§12 9차) |
 
 ---
 
@@ -490,3 +502,19 @@ minor 4건 반영: 비종료 상태의 재채점 문구를 §7 조건으로 통�
 8차(같은 검토자의 재확인): 7차 major 2건 해소, blocker 0, major 0, minor 6. 검토자는 FROZEN 에 동의했다. minor 6건은 위 변경 기록 행대로 반영했다.
 
 8차 판정: blocker 0, major 0. 실행 계약을 다시 FROZEN 으로 정한다.
+
+9차(실행 이미지와 컨테이너 단계 `0bbfc21` · `4aa08b6` 독립 검토, 관점 A · B · C 를 한 검토자가 봄): blocker 0, major 9, minor 10. 검토자는 FROZEN 에 동의하지 않았다. 상태를 REVIEWED 로 되돌렸다.
+
+| major | 수정 |
+|---|---|
+| 실패한 Bash 는 `PostToolUse` 대신 `PostToolUseFailure` 가 실행돼 실패한 시험 명령의 사후 기록과 결과 복사가 빠짐 | settings 에 `PostToolUseFailure` 등록(설계 §14.3) |
+| hook 이 Agent 의 현재 디렉터리 기준으로 결과 파일을 찾고, `verify-all.sh` · `pnpm run test` · `pnpm -C <dir> test` 를 시험 명령으로 보지 않음 | 기준 경로를 `/work/shop-admin` 으로 고정, 패턴 확장(설계 §14.3) |
+| 내보내기가 하위 디렉터리의 `CLAUDE.md` · `.claude/` 와 `CLAUDE.local.md` 를 통과시킴 | 하위 디렉터리 포함 검사, clone 직후 검사(§4.3) |
+| 시작 스크립트가 `dig` 실패에서 exit 9 로 끝나 Agent 관찰(`other`)로 기록됨 | `trap 'exit 90' ERR`, exit 90 은 `harness_failed(agent_start)`(§4.2, §6.3) |
+| `OOMKilled` 가 사용 한도 · API 오류보다 먼저 판정되고, 자식 process 만 죽어도 참 | 구조화된 오류를 먼저 판정, 계약 문구 수정(§6.3) |
+| 외부 원인 근거를 모으지 않음(client 종료 뒤 실행 중 컨테이너를 버림, inspect 실패를 모두 "컨테이너 없음" 으로 봄, `docker events` 없음) | 외부 원인 근거 셋, inspect 재시도와 "없는 컨테이너" 구분, 컨테이너 events 기록(§6.3) |
+| 채점 컨테이너가 시작하지 못해도 묶음 `error`(채점 실패)로 기록됨 | 컨테이너 상태로 판단해 `harness_failed(after_agent)`(§6.3) |
+| 재채점이 비종료 상태 실행을 거부하고 `api_error` · `usage_limit` 실행을 허용함 | 재실행 판정과 같은 실패 단계 규칙(§7) |
+| 재채점이 `lab/` 미commit 변경을 확인 · 기록하지 않음 | 집계 실험 거부, `harness_code(regrade-<회차>)` 기록, 채점용 복사본 생성에 잠자기 감지(§7) |
+
+minor 10건 반영: DNS 를 resolver 로 한정(§4.2), 이미지 · `/opt/cc` 의 연구 맥락 주석 삭제, hook 출력을 HOME 밖으로, 결과 root 실제 경로 검사(§4.3), 채점 network 설정 필드(§4.3), 시간 초과 컨테이너의 실제 종료 코드와 채점 컨테이너 상태 기록(§6.3), fingerprint 의 Docker · VM 정보와 `docker save` 사본(§4.5, §9.1), 기록 복사를 Agent 종료 기록 뒤로(§6.3), 실행 명령 인자 · token 사전 확인(§4.4), 컨테이너 생성 오류는 `agent_start`(§6.3), 내보내기의 경로 이름 · binary 검사(§4.3), README · 계약 문구(§3, §4.3, §4.4, §9.1).

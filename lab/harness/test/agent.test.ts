@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { classifyAgent, summarizeStream } from '../src/agent.ts';
+import { classifyAgent, summarizeStream, type ContainerExit } from '../src/agent.ts';
 import type { ProcessResult } from '../src/process.ts';
 import { needsNewAttempt } from '../src/run.ts';
 
@@ -67,4 +67,38 @@ test('재실행 판단: API 오류를 먼저 보고, 비종료 상태는 마지�
   assert.equal(needsNewAttempt(view({ state: 'running', terminal: false, agent: { outcome: 'harness_failed', error_kind: null } })), true);
   assert.equal(needsNewAttempt(view({ state: 'grading_succeeded', terminal: false })), false);
   assert.equal(needsNewAttempt(view({ agent: { outcome: 'agent_failed', error_kind: 'budget_exceeded' } })), false);
+});
+
+// docker inspect 로 얻은 컨테이너 종료 상태. 기본값은 정상 시작 · 종료한 컨테이너
+const container = (over: Partial<ContainerExit> = {}): ContainerExit => ({
+  found: true, started: true, exit_code: 1, oom_killed: false, error: '', running_after_client: false, inspect_error: null, ...over,
+});
+
+test('시작 스크립트가 실패해(exit 90, stdout 없음) Agent 를 실행하지 못한 컨테이너는 harness_failed(agent_start) 다', () => {
+  const cls = classifyAgent(exited(90), summarizeStream(''), '', container({ exit_code: 90 }));
+  assert.equal(cls.state, 'harness_failed');
+  assert.equal(cls.state === 'harness_failed' && cls.stage, 'agent_start');
+});
+
+test('컨테이너 OOM 기록이 있어도 사용 한도 · API 오류로 끝난 실행은 그 원인으로 분류한다', () => {
+  const oom = container({ oom_killed: true });
+  assert.deepEqual(classifyAgent(exited(1), stream({ subtype: 'success', is_error: true, result: "You've hit your session limit · resets 3:45pm" }), '', oom), { state: 'agent_failed', error_kind: 'usage_limit' });
+  assert.deepEqual(classifyAgent(exited(1), stream({ subtype: 'success', is_error: true, api_error_status: 529 }), '', oom), { state: 'agent_failed', error_kind: 'api_error' });
+  // 구조화된 오류가 없으면 OOM 이다
+  assert.deepEqual(classifyAgent(exited(137), summarizeStream(''), '', container({ exit_code: 137, oom_killed: true })), { state: 'agent_failed', error_kind: 'oom' });
+});
+
+test('시간 초과가 아닌데 docker client 가 끝난 뒤 컨테이너가 실행 중이었으면 외부 원인으로 harness_failed(agent) 다', () => {
+  const cls = classifyAgent(exited(137), summarizeStream(''), '', container({ exit_code: 137, running_after_client: true }));
+  assert.equal(cls.state === 'harness_failed' && cls.stage, 'agent');
+  // 시간 초과로 harness 가 끝낸 경우는 timed_out 이다
+  assert.deepEqual(classifyAgent({ ...exited(137), timed_out: true }, summarizeStream(''), '', container({ exit_code: 137, running_after_client: true })), { state: 'timed_out', error_kind: null });
+});
+
+test('docker inspect 가 응답하지 않으면 harness_failed(agent), 컨테이너 생성 오류(State.Error)는 harness_failed(agent_start) 다', () => {
+  const ok = stream({ subtype: 'success', is_error: false });
+  const unknown = classifyAgent(exited(0), ok, '', container({ found: false, started: false, exit_code: null, inspect_error: 'Cannot connect to the Docker daemon' }));
+  assert.equal(unknown.state === 'harness_failed' && unknown.stage, 'agent');
+  const createFailed = classifyAgent(exited(127), summarizeStream(''), '', container({ started: false, exit_code: 127, error: 'OCI runtime create failed' }));
+  assert.equal(createFailed.state === 'harness_failed' && createFailed.stage, 'agent_start');
 });

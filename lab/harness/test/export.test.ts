@@ -39,8 +39,12 @@ test('commit 된 Variant 내용만 commit 1개의 새 저장소로 내보내고,
   assert.equal(execFileSync('git', ['-C', repo, 'log', '-1', '--format=%an %s'], { encoding: 'utf8' }).trim(), 'dev Initial commit');
 });
 
-test('금지 문자열이나 지침 파일이 있으면 내보내지 않는다', () => {
-  const cases: Record<string, string>[] = [{ 'README.md': 'A/B Experiment 저장소\n' }, { 'src/x.ts': '// variant b\n' }, { 'CLAUDE.md': 'rules\n' }, { '.claude/settings.json': '{}\n' }];
+test('금지 문자열(내용 · 경로 이름 · binary)이나 지침 파일(하위 디렉터리 포함)이 있으면 내보내지 않는다', () => {
+  const cases: Record<string, string>[] = [
+    { 'README.md': 'A/B Experiment 저장소\n' }, { 'src/x.ts': '// variant b\n' }, { 'CLAUDE.md': 'rules\n' }, { '.claude/settings.json': '{}\n' },
+    { 'backend/CLAUDE.md': 'rules\n' }, { 'backend/.claude/settings.json': '{}\n' }, { 'CLAUDE.local.md': 'rules\n' }, { 'frontend/AGENTS.md': 'rules\n' },
+    { 'src/variant-b/flags.ts': 'export const x = 1;\n' }, { 'assets/logo.bin': '\u0000\u0001experiment\u0000' },
+  ];
   for (const files of cases) {
     const dir = authoringRepo(files);
     const out = tmp('export-');

@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { runProcess, type Clock } from './process.ts';
 
@@ -56,6 +56,20 @@ export async function cloneAt(repo: string, commit: string, dest: string, o: Ste
   rmSync(path.join(dest, '.git', 'ORIG_HEAD'), { force: true });
   const head = (await git('rev-parse', ['-C', dest, 'rev-parse', 'HEAD'], dest, o)).trim();
   if (head !== commit) throw new StepError(`HEAD ${head} 가 source commit ${commit} 과 다르다`);
+}
+
+// Claude Code 가 읽는 지침 파일. 실행 계약 §3 "지침 파일 없음" 을 clone 직후에도 확인한다(내보내기 검사와 같은 이름)
+const GUIDANCE = new Set(['CLAUDE.md', 'CLAUDE.local.md', 'AGENTS.md', '.claude']);
+
+export function guidanceFiles(dir: string, rel = ''): string[] {
+  const found: string[] = [];
+  for (const e of readdirSync(path.join(dir, rel), { withFileTypes: true })) {
+    const p = rel === '' ? e.name : `${rel}/${e.name}`;
+    if (p === '.git') continue;
+    if (GUIDANCE.has(e.name)) found.push(p);
+    else if (e.isDirectory()) found.push(...guidanceFiles(dir, p));
+  }
+  return found;
 }
 
 // diff 에 쓰는 harness 소유 git 저장소. Agent 작업 디렉터리의 .git 은 Agent 가 바꾸거나 지울 수 있어 쓰지 않는다

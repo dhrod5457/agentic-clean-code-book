@@ -97,21 +97,24 @@ Variant 보다 먼저 쓴다. 과제 문구도 이 단계에서 먼저 고정한
 - [x] 컨테이너 연결 경로: workspace, 빈 `CLAUDE_CONFIG_DIR`, hook 출력, 읽기 전용 `/opt/cc/` 만 연결(실행 계약 §4.3)
   - 완료 조건: 컨테이너 안의 환경 변수 · 연결 경로 · hostname · `/opt/cc/` 파일 내용에 `agentic`, `variant`, `실험`, `experiment`, Variant 코드가 없다
 - [x] OOM · 외부 원인 종료 판정(`docker inspect`, `docker events`)과 재채점(`stage = after_agent` 실행을 source commit + `final.patch` 복사본으로 다시 채점, 최대 2회) (실행 계약 §6.3, §7)
+  - 결과(2026-10-03, 9차 검토 반영): 외부 원인 근거는 client 종료 뒤 실행 중 컨테이너 · inspect 무응답 · 잠자기 감지 셋이다. `docker events` 는 컨테이너마다 원본에 기록만 하고 판정에 쓰지 않는다. VM 재시작은 이 근거로 잡히지 않을 수 있어 자동 갱신 끄기로 막는다
 
 - [x] 컨테이너 이미지: JDK, Node, pnpm, Playwright Chromium, 고정 글꼴, Claude Code 고정 버전, `TZ=Asia/Seoul`, `LANG=ko_KR.UTF-8`, non-root 사용자
   - 완료 조건: 이미지 digest 를 `lab/harness/image.lock` 에 기록
   - 결과(2026-10-03): `lab/harness/image/Dockerfile`, id `sha256:ea03f941…`. 이미지 안 Storybook smoke 에서 `Default` 통과, `Must Fail` 실패(exit 1)
+  - 결과(2026-10-03, 9차 검토 반영): `start.sh` 만 바꿔 다시 build, id `sha256:8388f614…`. 층 1 ~ 10 은 이전 이미지와 같다. `docker save` 사본과 sha256 을 `image.lock` 의 `saved` 에 기록
   - 완료 조건: 설계 §3.5 의 Storybook smoke(story 1개 통과, 음성 대조 실패)를 이미지 안에서 다시 실행해 같은 결과가 나온다. 확인용 프로젝트는 삭제한다
 - [ ] egress 제한: Anthropic API 도메인만 허용
   - 완료 조건: 컨테이너 안에서 `curl https://registry.npmjs.org` 가 실패하고 Claude Code 호출은 성공
   - 결과(2026-10-03): `image/start.sh` 적용. npm · GitHub · host 차단, `api.anthropic.com` HTTP 405, Agent 권한(uid 1000, CapEff 0)으로 규칙 변경 거부. Claude Code 호출 성공은 pilot 에서 확인
+  - 결과(2026-10-03, 9차 검토 반영): DNS 를 `/etc/resolv.conf` 의 resolver 로 한정(`dig @1.1.1.1` 실패), 설정 실패 시 명령 없이 exit 90
 - [x] `export.sh <variant>`: 설계 §15.1
-  - 완료 조건: 내보낸 저장소에서 `agentic`, `variant`, `실험`, `experiment` 검색 결과 0건, commit 1개, `CLAUDE.md` · `AGENTS.md` · `.claude/` 없음
+  - 완료 조건: 내보낸 저장소에서 `agentic`, `variant`, `실험`, `experiment` 검색 결과(파일 내용 · binary · 경로 이름) 0건, commit 1개, 하위 디렉터리를 포함해 `CLAUDE.md` · `CLAUDE.local.md` · `AGENTS.md` · `.claude/` 없음
 - [ ] `run.sh <task> <variant> <run-id>`: clone, 의존성 offline 설치, Claude Code 실행, 결과 수집
   - 결과(2026-10-03): 실행 명령은 `lab/harness/src/cli.ts`(`pnpm lab run` · `regrade` · `rebuild-result`). 인자와 시간 제한은 계약대로 구현했다. `GRADLE_USER_HOME` · `wrapper/dists` 복사와 의존성 offline 설치는 7단계 cache 이미지와 함께 한다
   - 완료 조건: 실행마다 빈 `CLAUDE_CONFIG_DIR`, `--strict-mcp-config`, `--settings`(기록용 hook), `--dangerously-skip-permissions`(non-root 컨테이너와 egress 제한 조건에서만, 설계 §15.3), `--session-id`, `--output-format stream-json --verbose --include-hook-events`, `--model`, `--effort`, `--max-budget-usd`, 시간 제한 45분
   - 완료 조건: 실행마다 빈 `GRADLE_USER_HOME` 을 만들고 이미지의 `wrapper/dists` 를 복사한다. `GRADLE_RO_DEP_CACHE` 는 이미지 안 root 소유 경로를 가리킨다(설계 §15.2, 실행 계약 §4.3). cache 내용은 7단계에서 채운다
-- [x] 기록용 hook: `PreToolUse` · `PostToolUse` 입력에 기록 시각을 붙여 `hooks.jsonl` 에 추가. 시험 명령이면 그 명령 시작 이후 수정된 시험 결과 파일만 복사(설계 §14.3)
+- [x] 기록용 hook: `PreToolUse` · `PostToolUse` · `PostToolUseFailure` 입력에 기록 시각을 붙여 `hooks.jsonl` 에 추가. 시험 명령이면(실패 포함) 그 명령 시작 이후 수정된 시험 결과 파일만 작업 디렉터리 루트 기준으로 복사(설계 §14.3)
   - 완료 조건: hook 이 표준 출력에 아무것도 쓰지 않고 항상 exit 0
 - [x] stream 수신 시각 기록: 원본 줄을 바꾸지 않고 줄마다 수신 시각을 별도 파일에 쓴다(실행 계약 §8.4)
 - [ ] 빈 저장소로 pilot 1회

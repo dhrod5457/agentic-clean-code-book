@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { before, test } from 'node:test';
 import type { ExecConfig } from '../src/config.ts';
+import { settleContainer } from '../src/docker.ts';
 import { executeRun } from '../src/run.ts';
 import { fixture, tmp, writeScript } from './helpers.ts';
 
@@ -67,7 +68,7 @@ function containerFixture(prompt: string, tune: (c: ExecConfig) => void = () => 
   f.config.agent.settings_file = 'lab/harness/config/cc/settings.json';
   f.config.agent.hook_files = ['lab/harness/config/cc/record.mjs'];
   f.config.grading.run_script = path.join(graderDir, 'run.sh');
-  f.config.environment = { runtime: 'docker', image: testImage, platform: 'linux/arm64', cpus: 2, memory: '1g' };
+  f.config.environment = { runtime: 'docker', image: testImage, platform: 'linux/arm64', cpus: 2, memory: '1g', grading_network: 'bridge' };
   f.config.timeouts_ms.agent = 60_000;
   tune(f.config);
   f.opts.probe = undefined;
@@ -125,6 +126,8 @@ test('시간 제한을 넘은 컨테이너는 timed_out 이고 컨테이너가 �
   const f = containerFixture('MODE=sleep\n', (c) => { c.timeouts_ms.agent = 4000; c.timeouts_ms.grace = 2000; });
   const { runId, result } = await executeRun(f.spec(), f.opts);
   assert.equal(result.agent.outcome, 'timed_out');
+  // 실행 중이던 컨테이너를 harness 가 끝낸 뒤의 종료 코드다
+  assert.equal(result.agent.container.exit_code, 137);
   assert.ok(containerGone(`r-${runId}`));
   assert.equal(existsSync(path.join(f.resultsRoot, 'runs', runId, 'artifacts/final.patch')), true);
 });
@@ -134,4 +137,41 @@ test('docker 실행에서 결과 root 경로에 금지 문자열이 있으면 �
   const root = path.join(tmp('root-'), 'variant-runs');
   await assert.rejects(executeRun(f.spec(), { ...f.opts, resultsRoot: root }), /결과 root 경로/);
   assert.equal(existsSync(path.join(root, 'runs')), false);
+  // 중립적인 이름의 symlink 라도 실제 경로가 mountinfo 에 보인다
+  const link = path.join(tmp('root-'), 'runs-root');
+  symlinkSync(root, link);
+  await assert.rejects(executeRun(f.spec(), { ...f.opts, resultsRoot: link }), /결과 root 경로/);
+  assert.equal(existsSync(path.join(root, 'runs')), false);
+});
+
+test('시작 스크립트가 외부 통신 제한을 설정하지 못하면 명령을 실행하지 않고 exit 90 으로 끝난다', { skip: !dockerReady }, () => {
+  const r = spawnSync('docker', ['run', '--rm', '--network', 'none', '--cap-add', 'NET_ADMIN', '--cap-add', 'NET_RAW', testImage, 'sh', '-c', 'echo ran'], { encoding: 'utf8' });
+  assert.equal(r.status, 90, r.stderr);
+  assert.equal(r.stdout, '');
+});
+
+test('채점 컨테이너가 run.sh 를 시작하지 못하면 묶음 판정 없이 harness_failed(after_agent) 다', { skip: !dockerReady }, async () => {
+  const f = containerFixture('다음 요청을 처리해 줘.\n');
+  rmSync(f.config.grading.run_script);
+  const { result } = await executeRun(f.spec(), f.opts);
+  assert.equal(result.state, 'harness_failed');
+  assert.equal(result.harness_failure.stage, 'after_agent');
+  assert.equal(result.agent.outcome, 'agent_succeeded');
+  assert.equal(result.grading.outcome, null);
+});
+
+test('docker client 가 끝난 뒤에도 실행 중인 컨테이너는 끝내고 그 사실을 남기며, 없는 컨테이너는 found:false 다', { skip: !dockerReady }, async () => {
+  const name = `settle-${process.pid}`;
+  const client = spawn('docker', ['run', '--name', name, '--entrypoint', '', testImage, 'sleep', '120'], { stdio: 'ignore' });
+  for (let i = 0; i < 50 && spawnSync('docker', ['inspect', '-f', '{{.State.Running}}', name], { encoding: 'utf8' }).stdout.trim() !== 'true'; i++) await new Promise((r) => setTimeout(r, 200));
+  client.kill('SIGKILL');
+  await new Promise((r) => client.once('exit', r));
+  const events = path.join(tmp('events-'), 'docker-events.jsonl');
+  const state = await settleContainer(name, new Date(Date.now() - 60_000).toISOString(), events);
+  assert.equal(state.running_after_client, true);
+  assert.equal(state.exit_code, 137);
+  assert.match(readFileSync(events, 'utf8'), /"die"/);
+  assert.ok(containerGone(name));
+  const missing = await settleContainer(name, new Date().toISOString(), events);
+  assert.deepEqual([missing.found, missing.inspect_error], [false, null]);
 });

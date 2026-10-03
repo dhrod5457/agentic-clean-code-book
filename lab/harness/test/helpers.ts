@@ -134,7 +134,7 @@ export function fixture(agentBody: string, graderBody = 'pass'): Fixture {
     timeouts_ms: { prepare: 30_000, agent: 10_000, grace: 300, grading_normative: 10_000, grading_diagnostic: 10_000 },
     retry: { max_attempts: 3 },
     grading: { run_script: grader },
-    environment: { runtime: 'local', image: null, platform: 'linux/arm64', cpus: 4, memory: '8g' },
+    environment: { runtime: 'local', image: null, platform: 'linux/arm64', cpus: 4, memory: '8g', grading_network: 'bridge' },
   };
   const tasks: Record<string, TaskDef> = {
     exp1: { experiment: 'exp1', prompt, grading: { normative: ['exp1'], diagnostic: [] } },

@@ -4,6 +4,7 @@ import { classifyAgent, summarizeStream } from './agent.ts';
 import type { ExecConfig } from './config.ts';
 import { extractVersion, TOOLS, type RawFingerprint } from './fingerprint.ts';
 import { junitPath, parseJunit, type SuiteKind, type SuiteStatus } from './grader.ts';
+import type { SettledContainer } from './docker.ts';
 import type { ProcessResult } from './process.ts';
 import { isTerminal, type RunState } from './state.ts';
 
@@ -21,6 +22,7 @@ export const RAW = {
   agentStderr: 'raw/agent/stderr.log',
   agentConfig: 'raw/agent/claude-config',
   agentHooks: 'raw/agent/hooks',
+  agentDockerEvents: 'raw/agent/docker-events.jsonl',
   grading: 'raw/grading',
 } as const;
 
@@ -48,9 +50,10 @@ export type HarnessEvent =
   // harness 가 묶음의 최종 판정을 정한 기록. 이 기록이 없는 묶음은 결과가 없는 것이다
   | { type: 'suite_result'; at: string; kind: SuiteKind; suite: string; round: number; status: SuiteStatus }
   | { type: 'grading_error'; at: string; kind: SuiteKind; suite: string; round: number; message: string }
-  | { type: 'container_exit'; at: string; role: 'agent'; name: string; found: boolean; exit_code: number | null; oom_killed: boolean; error: string }
+  | ({ type: 'container_exit'; at: string; role: 'agent' | 'grading'; name: string } & SettledContainer)
   | { type: 'regrade'; at: string; round: number; suites: string[] }
-  | { type: 'harness_code'; at: string; when: 'start' | 'before_grading'; head: string | null; lab_changes: string | null }
+  // when: start, before_grading, regrade-<회차>
+  | { type: 'harness_code'; at: string; when: string; head: string | null; lab_changes: string | null }
   | { type: 'note'; at: string; message: string };
 
 export interface RunJson {
@@ -169,8 +172,11 @@ function agentSummary(runDir: string, events: HarnessEvent[], run: RunJson, reac
   // Agent 실행 중 harness 가 강제 종료되면 종료 기록은 없지만 stdout 은 남는다. 사용량은 stdout 에서 읽는다
   if (p === null && (!reachedRunning || stdout === null)) return null;
   const stream = summarizeStream(stdout ?? '');
-  const ce = events.find((e): e is Extract<HarnessEvent, { type: 'container_exit' }> => e.type === 'container_exit') ?? null;
-  const container = ce === null ? null : { found: ce.found, exit_code: ce.exit_code, oom_killed: ce.oom_killed, error: ce.error };
+  const ce = events.find((e): e is Extract<HarnessEvent, { type: 'container_exit' }> => e.type === 'container_exit' && e.role === 'agent') ?? null;
+  const container = ce === null ? null : {
+    found: ce.found, started: ce.started, exit_code: ce.exit_code, oom_killed: ce.oom_killed, error: ce.error,
+    running_after_client: ce.running_after_client, inspect_error: ce.inspect_error,
+  };
   const cls = p === null ? null : classifyAgent(p, stream, readText(runDir, RAW.agentStderr) ?? '', container);
   const r = stream.result;
   const usage = (r?.usage ?? null) as Record<string, unknown> | null;
