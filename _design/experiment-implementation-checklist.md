@@ -35,29 +35,29 @@
 
 ## 1. 공통 명세 (`lab/spec/`)
 
-- [ ] `requirements.md`: 설계 §4.1, §4.2 의 기능과 규칙
-- [ ] `api.md`: 모든 endpoint, 요청 · 응답 JSON 예시, 오류 코드 목록과 HTTP 상태
-- [ ] `scenarios.md`: 행동 시나리오 목록. ID 형식 `<영역 3글자>-<두 자리 번호>`, 각 시나리오에 입력 값, 기대 결과, 시험 단계(unit, web, integration, component, e2e)
+- [x] `requirements.md`: 설계 §4.1, §4.2 의 기능과 규칙
+- [x] `api.md`: 모든 endpoint, 요청 · 응답 JSON 예시, 오류 코드 목록과 HTTP 상태
+- [x] `scenarios.md`: 행동 시나리오 목록. ID 형식 `<영역 3글자>-<두 자리 번호>`, 각 시나리오에 입력 값, 기대 결과, 시험 단계(unit, web, integration, component, e2e)
   - 완료 조건: 실험 1 관련 시나리오(무료배송 경계값, 부분 환불 배송비 차감, 정책 조회)가 있다
-- [ ] `schema.sql`: 테이블과 열 정의. 설계 §4.3 의 열(회원 `last_login_at` · `withdrawn_at`, 배송 `fee` · `shipped_at` · `delivered_at`, 환불 `amount` · `requested_at`)을 포함한다
-- [ ] `seed.sql`: 회원 40, 주문 120, 배송 100, 환불 20, 관리자 계정 12. `schema.sql` 에 맞춘다
+- [x] `schema.sql`: 테이블과 열 정의. 설계 §4.3 의 열(회원 `last_login_at` · `withdrawn_at`, 배송 `fee` · `shipped_at` · `delivered_at`, 환불 `amount` · `requested_at`)을 포함한다
+- [x] `seed.sql`: 회원 40, 주문 120, 배송 100, 환불 20, 관리자 계정 12. `schema.sql` 에 맞춘다
   - 완료 조건: 이름 · 부서명이 모두 20자 이하
   - 완료 조건: 실험 2 의 조회 8개(T2-M1 ~ T2-R2) 조건에 맞는 행이 각각 1개 이상 있다. 확인 SQL 8개를 `lab/spec/seed-checks.sql` 에 둔다
   - 완료 조건: 날짜 값은 고정 기준 시각(`Clock`)에 대한 상대값으로 계산돼 실행 날짜에 따라 결과가 바뀌지 않는다
-- [ ] `ui.md`: 화면 9개, 열 구성, 메뉴 그룹 순서, 버튼 이름, 1280px 기준
+- [x] `ui.md`: 화면 9개, 열 구성, 메뉴 그룹 순서, 버튼 이름, 1280px 기준
   - 완료 조건: 그룹 안 메뉴는 label 가나다순이다(두 Variant 동일, 설계 §8.2). 상세 화면은 메뉴에 넣지 않는다
   - 완료 조건: 표의 셀 텍스트는 줄바꿈하지 않고, 표가 컨테이너보다 넓으면 표 컨테이너에 가로 스크롤이 생긴다(설계 §8.3 의 원인이 되는 동작)
-- [ ] `versions.md`: 설계 §3.4 결정표와 보조 패키지의 버전. Variant A 구현 세션은 `lab/spec/` 만 받으므로 버전을 여기에 둔다
+- [x] `versions.md`: 설계 §3.4 결정표와 보조 패키지의 버전. Variant A 구현 세션은 `lab/spec/` 만 받으므로 버전을 여기에 둔다
   - 완료 조건: 버전 값만 적고 선택 이유 · 실험 목적 · Variant 구분은 적지 않는다. B 전용 패키지(설계 §3.5)는 적지 않는다
   - 완료 조건: google-java-format 은 1.36.1 을 명시한다(설계 §3.5)
-- [ ] `conventions.md`: 설계 §5.5 의 구현 지시
+- [x] `conventions.md`: 설계 §5.5 의 구현 지시
   - 완료 조건: 실험 목적, Variant 구분, 과제 내용이 없다
-- [ ] `requirements.md` 에 다음 값을 정해 적는다
+- [x] `requirements.md` 에 다음 값을 정해 적는다
   - seed 의 고정 기준 시각과 그 시각을 `Clock` 으로 쓰는 설정 키(E2E, 숨김 채점, 실험 실행에서 사용, 설계 §4.3)
   - 부서명 최대 길이(120자 이상. 실험 3 채점이 120자 계정을 만든다)
   - 비밀번호 저장 방식, CSRF 처리, 정적 자원 제공과 SPA fallback
   - 환불 차감액을 노출하는 응답 필드, 환불 금액이 3,000원보다 작을 때의 처리(설계 §4.2)
-- [ ] `requirements.md` · `ui.md` 에 설계 §7.3 의 의존 방향을 거스르는 요구가 없다
+- [x] `requirements.md` · `ui.md` 에 설계 §7.3 의 의존 방향을 거스르는 요구가 없다
   - 완료 조건: 회원 상세의 주문 목록, 주문 상세의 환불 이력, 탈퇴 시 주문 확인, 배송 상태 변경 시 환불 확인처럼 member → order, order → refund, delivery → refund 방향을 만드는 요구가 없다. 필요하면 설계 §7.3 을 먼저 고친다
 
 다음 단계 진입 조건: 1단계 파일이 모두 commit 돼 있고, 다른 사람이 읽고 질문 없이 API 를 호출하는 시험을 쓸 수 있다.
@@ -108,7 +108,7 @@ Variant 보다 먼저 쓴다. 과제 문구도 이 단계에서 먼저 고정한
 
 ## 4. Variant A (`lab/variants/a/`)
 
-- [ ] 구현 세션 준비: 연구 문서가 없는 별도 디렉터리에 `lab/spec/` 만 복사하고, 지시는 "`lab/spec/` 의 명세를 `conventions.md` 에 따라 구현하라" 로 한정
+- [ ] 구현 세션 준비: 연구 문서가 없는 별도 디렉터리에 `lab/spec/` 만 복사하고(`seed-checks.sql` 은 실험 2 조회 조건을 담고 있으므로 뺀다), 지시는 "`lab/spec/` 의 명세를 `conventions.md` 에 따라 구현하라" 로 한정
 - [ ] 의존성: Gradle 선언과 `pnpm-lock.yaml` 의 직접 의존성 버전이 `lab/spec/versions.md` 와 같다. Gradle wrapper 는 9.8.0
 - [ ] backend: 설계 §7.2 구조
   - 완료 조건: 무료배송 판단은 `service/DeliveryFeePolicy` 한 곳. 기준 금액 숫자가 운영 코드에 한 번만 나온다
