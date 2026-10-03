@@ -303,3 +303,75 @@ Agent A가 file X를 수정하고 Agent B가 file Y를 수정하더라도, A가 
 - Worktree를 없애는 것과 Worktree 자체를 싸게 만드는 것 중 어느 쪽이 실제 throughput에 유리한가?
 
 상세: 19-shared-workspace-vs-worktree.md
+
+
+---
+
+## Gap Closure — 2026-10-03
+
+18~19번의 Worktree/Shared Workspace 연구 뒤 남아 있던 큰 공백을 20~28번에서 추가 조사했다.
+
+### 추가로 검증할 연구 질문
+
+#### RQ8. 요구사항이 불완전해도 올바른 제약을 찾을 수 있는가
+
+- prompt에 없는 repository invariant를 찾을 수 있는가.
+- ambiguity가 있으면 추측 대신 질문/보류할 수 있는가.
+- contract, test, architecture rule이 같은 책임 위치를 가리키는가.
+- 중요 compatibility 조건이 검색 가능한가.
+
+상세: `21-requirement-discoverability.md`
+
+#### RQ9. Verifier 자체를 얼마나 신뢰할 수 있는가
+
+- reference implementation이 verifier를 실제로 통과하는가.
+- 의도적으로 잘못된 mutant를 잡는가.
+- requirement와 hidden test가 정확히 연결되는가.
+- 독립 oracle 간 판정이 일치하는가.
+
+상세: `22-verifier-validity.md`
+
+#### RQ10. 반복 변경 뒤에도 다음 Agent가 쉽게 일할 수 있는가
+
+- task가 누적될수록 구조적 열화가 빨라지는가.
+- files-read / verification time / context cost가 시간에 따라 증가하는가.
+- Agent가 만든 코드를 다음 Agent가 유지보수할 때 성공률이 떨어지는가.
+- cleanup을 기계적으로 반복해야 하는가.
+
+상세: `20-iterative-structural-erosion.md`
+
+#### RQ11. Agent가 사용하는 context의 신뢰 경계는 어디인가
+
+- repository 문서와 user content를 구분하는가.
+- 낮은 신뢰 input이 privileged action으로 승격되는가.
+- tool/MCP response의 provenance가 보존되는가.
+- verifier/policy 자체를 Agent가 우회할 수 있는가.
+
+상세: `26-context-trust-boundary.md`
+
+### 기존 품질 속성 보정
+
+- **Discoverability**에 invariant/contract discovery를 포함한다.
+- **Verifiability**는 빠른 실행뿐 아니라 verifier validity를 포함한다.
+- **State Reproducibility**는 UI의 Visual Observability/Feedback Loop까지 확장 검토한다.
+- **Recoverability**는 prose handoff가 아니라 versioned/executable artifact 중심으로 정의한다.
+- **Containment**는 permission/workspace와 함께 context trust boundary를 포함한다.
+- **Entropy Resistance**는 현재 상태뿐 아니라 structural erosion velocity를 측정한다.
+
+### 새로 수집한 상세 문서
+
+- `20-iterative-structural-erosion.md`
+- `21-requirement-discoverability.md`
+- `22-verifier-validity.md`
+- `23-visual-feedback-loop.md`
+- `24-architecture-drift-and-erosion.md`
+- `25-verification-efficiency.md`
+- `26-context-trust-boundary.md`
+- `27-long-running-continuity.md`
+- `28-research-gap-closure.md`
+
+### 연구 범위 판단
+
+현재 단계에서는 Worktree, Agent framework, AGENTS.md 사례를 더 늘리는 것보다 실제 A/B 실험으로 넘어가는 가치가 높다.
+
+새 자료는 기존 원칙을 반박하거나 metric/실험 validity를 바꿀 때만 추가한다.
