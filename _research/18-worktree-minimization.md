@@ -597,3 +597,34 @@ Agentic Clean Code가 해야 할 일은 책상을 더 많이 만드는 데서 �
 > **각 Agent가 애초에 서로 다른 일을 잡을 수 있도록 코드의 경계를 만드는 것.**
 
 그렇게 되면 Worktree는 모든 작업의 기본 비용이 아니라, 충돌 위험이 있는 작업에 사용하는 안전장치가 될 수 있다.
+
+
+---
+
+## 16. 추가 조사로 수정된 판단
+
+후속 조사에서 STORM, CAID, GitButler, Jujutsu, AgenticFlict, 기존 merge-conflict 실증 연구를 추가로 검토했다.
+
+가장 중요한 수정은 기존에는 주로 write_scope가 겹치는지를 중심으로 isolation을 판단했지만, shared workspace의 실제 위험은 readSet(A)와 writeSet(B)의 교집합도 포함한다는 점이다.
+
+Agent A와 B가 서로 다른 파일을 수정하더라도 A가 판단에 사용한 contract/schema/config를 B가 변경하면 A의 다음 수정은 stale context 위에서 만들어질 수 있다.
+
+따라서 Hybrid Isolation scheduler의 입력을 다음처럼 확장한다.
+
+~~~text
+write_scope
+read_scope
+reasoning_dependencies
+affected_modules
+contracts_read
+contracts_write
+runtime_resources
+generated_outputs
+git_operations
+historical_contention
+risk_level
+~~~
+
+또한 isolation level은 Task 시작 전에 한 번 정하고 끝내는 값이 아니라 실행 중 read/write overlap을 관찰해 승격할 수 있는 runtime policy로 보는 것이 더 타당하다.
+
+추가 상세 연구: 19-shared-workspace-vs-worktree.md
