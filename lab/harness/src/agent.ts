@@ -42,6 +42,7 @@ export function agentEnv(config: ExecConfig, configDir: string, host: NodeJS.Pro
     CLAUDE_CONFIG_DIR: configDir,
   };
   // 구독 인증 token 만 넘긴다. ANTHROPIC_API_KEY 를 넘기면 API 과금 인증으로 바뀔 수 있다(실행 계약 §4.4)
+  // CLAUDE_CODE_OAUTH_TOKEN 보다 우선하는 인증 수단(ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_USE_*)은 허용 목록에 넣지 않는다
   for (const name of ['PATH', 'HOME', 'CLAUDE_CODE_OAUTH_TOKEN']) {
     const v = host[name];
     if (v !== undefined) env[name] = v;
@@ -92,7 +93,7 @@ export function summarizeStream(text: string): StreamSummary {
   return s;
 }
 
-export type ErrorKind = 'budget_exceeded' | 'api_error' | 'signal' | 'other';
+export type ErrorKind = 'budget_exceeded' | 'api_error' | 'usage_limit' | 'signal' | 'other';
 
 export type AgentClass =
   | { state: 'agent_succeeded'; error_kind: null }
@@ -103,7 +104,12 @@ export type AgentClass =
 // 구조화된 필드만 본다. CLI 2.1.287 은 API 오류를 is_error 와 api_error_status(HTTP 상태 숫자)로 낸다(설치된 CLI 의 result schema 로 확인).
 // 보조로 오류 result 의 subtype · error · errors, `API Error:` 로 시작하는 result 문구와 stderr 줄을 본다.
 // Agent 가 쓴 문장과 그 밖의 stderr 는 보지 않는다. 문장 속 숫자(500,000원)나 stack trace 줄 번호가 API 오류로 읽히기 때문이다
+// 구독 사용 한도 도달 문구. 공식 문서 https://code.claude.com/docs/en/errors 의 "You've hit your session limit · resets 3:45pm" 형식
+const USAGE_LIMIT = /^You've hit your [A-Za-z]+ limit\b/;
+
 function errorKind(result: Record<string, unknown> | null, stderr: string): ErrorKind {
+  const resultText = result !== null && result.is_error === true && typeof result.result === 'string' ? result.result.trim() : '';
+  if (USAGE_LIMIT.test(resultText) || stderr.split('\n').some((l) => USAGE_LIMIT.test(l.trim()))) return 'usage_limit';
   if (result !== null && result.is_error === true && typeof result.api_error_status === 'number') {
     const status = result.api_error_status;
     if (status === 429 || status >= 500) return 'api_error';

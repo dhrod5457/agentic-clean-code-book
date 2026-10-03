@@ -76,7 +76,6 @@ test('Variant a 와 b 의 Agent 실행 인자 · 환경 변수는 세션 ID 와 
   process.env.ANTHROPIC_MODEL = 'claude-haiku-4-5';
   process.env.CLAUDE_CODE_EFFORT_LEVEL = 'max';
   process.env.ANTHROPIC_API_KEY = 'sk-ant-test';
-  process.env.CLAUDE_CODE_OAUTH_TOKEN = 'oauth-test';
   try {
     const seen: { argv: string[]; env: Record<string, string> }[] = [];
     for (const variant of ['a', 'b']) {
@@ -106,7 +105,6 @@ test('Variant a 와 b 의 Agent 실행 인자 · 환경 변수는 세션 ID 와 
     delete process.env.ANTHROPIC_MODEL;
     delete process.env.CLAUDE_CODE_EFFORT_LEVEL;
     delete process.env.ANTHROPIC_API_KEY;
-    delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
   }
 });
 
@@ -233,14 +231,14 @@ test('채점 port 를 다른 process 가 쓰고 있으면 harness_failed(after_a
   }
 });
 
-test('Agent 실행 파일을 시작하지 못하면 harness_failed(agent_start) 이고 새 attempt 로 다시 실행한다', async () => {
+test('Agent 실행 파일이 없으면 준비 단계(인증 확인)에서 harness_failed(prepare) 이고 새 attempt 로 다시 실행한다', async () => {
   const f = fixture(AGENT_OK);
   f.config.retry.max_attempts = 2;
   f.opts.probe = async () => ({ exit_code: 0, output: '2.1.287 (Claude Code)\nopenjdk version "25.0.4"\n', error: null });
   f.config.agent.executable = path.join(f.dir, 'missing-claude');
   const { runs } = await executeWithRetry(f.spec(), f.opts);
   assert.equal(runs.length, 2);
-  assert.ok(runs.every((r) => r.result.state === 'harness_failed' && r.result.harness_failure.stage === 'agent_start'));
+  assert.ok(runs.every((r) => r.result.state === 'harness_failed' && r.result.harness_failure.stage === 'prepare'));
 });
 
 test('Claude Code 버전이 실행 설정과 다르면 Agent 를 실행하지 않고 harness_failed(prepare) 다', async () => {
@@ -457,4 +455,39 @@ test('Agent 실행 중 lab/ 밖의 commit 은 채점을 막지 않는다', async
   const { result } = await executeRun(g.spec(), { ...g.opts, labRoot: f.labRoot });
   assert.equal(result.state, 'completed');
   assert.equal(result.grading.outcome, 'passed');
+});
+
+test('구독 token 이 없으면 Agent 를 실행하지 않고 harness_failed(prepare) 다', async () => {
+  const f = fixture(AGENT_OK);
+  const saved = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  try {
+    const { result } = await executeRun(f.spec(), f.opts);
+    assert.equal(result.state, 'harness_failed');
+    assert.equal(result.harness_failure.stage, 'prepare');
+    assert.match(result.harness_failure.reason, /oauth_token/);
+    assert.equal(existsSync(f.argvFile), false);
+  } finally {
+    process.env.CLAUDE_CODE_OAUTH_TOKEN = saved;
+  }
+});
+
+test('구독 사용 한도에 걸리면 바로 다시 실행하지 않고 한도 도달로 멈춘다', async () => {
+  const limit = path.join(tmp(), 'limit.jsonl');
+  writeFileSync(limit, `${JSON.stringify({ type: 'result', subtype: 'success', is_error: true, result: "You've hit your session limit · resets 3:45pm" })}\n`);
+  const f = fixture(`cat "${limit}"; exit 1`);
+  const { runs, missing, usageLimited } = await executeWithRetry(f.spec(), f.opts);
+  assert.equal(runs.length, 1);
+  assert.equal(usageLimited, true);
+  assert.equal(missing, false);
+  assert.equal(runs[0].result.agent.error_kind, 'usage_limit');
+});
+
+test('한도 해제 뒤 이어서 실행해도 반복 번호당 재실행 상한은 이전 attempt 를 포함해 센다', async () => {
+  const f = fixture(API_ERROR);
+  const { runs, missing } = await executeWithRetry(f.spec(), f.opts, { attempt: 4, retryOf: 'prev-run', counted: 2 });
+  assert.equal(runs.length, 1);
+  assert.equal(missing, true);
+  assert.equal(runs[0].result.identity.attempt, 4);
+  assert.equal(runs[0].result.identity.retry_of, 'prev-run');
 });

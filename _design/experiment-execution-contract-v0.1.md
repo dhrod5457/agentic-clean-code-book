@@ -1,7 +1,7 @@
 # 실험 실행 계약 v0.1
 
 작성일: 2026-10-03
-상태: **REVIEWED** (2026-10-03). 인증 방식을 사용자의 Claude Max 구독으로 바꿨다(§4.4). 실행 기계 변경 검토와 함께 재검토한다.
+상태: **FROZEN** (2026-10-03, 구독 인증 변경 후 재확정). 판정 근거는 §12 8차. 이후 바꾸면 상태를 REVIEWED 로 되돌리고 §11 · §12 에 이유를 적는다.
 기준 설계: `_design/experiment-codebase-design-v0.1.md` (이하 "설계")
 
 이 문서는 설계 §19.2 의 Phase 0B 결정과, A/B 실행에서 Variant 이외의 조건을 고정하는 방법을 정한다.
@@ -26,12 +26,12 @@ harness(`lab/harness/`)는 이 문서의 값과 규칙을 구현한다. 이 문�
 | 모델 | **`claude-opus-5-5`** (전체 ID, alias 아님). subagent 도 같은 모델 | 공식 비교표의 "long-running agentic coding" 용 모델. Fable 5.1 은 토큰 가격 2.5배 |
 | effort | **`medium`** (명시 고정) | Claude Code 의 Opus 5.5 기본값이다. 실험이 측정하는 대상은 기본 사용 조건의 Agent 다 |
 | 실행당 한도 | `--max-budget-usd 15`, 시간 45분 | §5.1 |
-| 전체 사용량 | 사용자의 Claude Max 구독 사용 한도 안에서 실행한다. USD 청구는 없다. 계산 비용(`total_cost_usd`)과 token 을 실행마다 기록한다 | §5.2 |
+| 전체 사용량 | 사용자의 Claude Max 구독 사용 한도 안에서 실행한다. usage credits 를 끈 상태에서 USD 청구는 없다. 계산 비용(`total_cost_usd`)과 token 을 실행마다 기록한다 | §4.4, §5.2 |
 | 실행 기계 | 이 Mac(Apple M5, 10 core, 32GB, macOS 26.5.2)의 Docker Desktop 4.48.0(Engine 28.5.1), `linux/arm64` | §4.1 |
 | 인증 | 사용자의 Claude Max 구독. `claude setup-token` 으로 만든 장기 인증 token 을 환경 변수 `CLAUDE_CODE_OAUTH_TOKEN` 으로 컨테이너에 넣는다. API key 는 쓰지 않는다 | §4.4 |
 | 원본 로그 보관 | 실행 기계의 결과 root(`~/lab-runs/v0.1/`). 실험이 끝나면 archive 를 private GitHub 저장소의 release asset 으로 올린다. Git commit 하지 않는다 | §8.4 |
 | timeout | Agent 45분, 종료 유예 30초, 준비 15분, 판정 채점 30분, 진단 채점 15분 | §6.5 |
-| retry | Agent 관찰 결과는 다시 실행하지 않는다. Agent 관찰 전에 생긴 harness 실패와 API 오류(구독 사용 한도 도달 포함)만 새 attempt 로 실행한다. 반복 단위당 최대 3회 | §7 |
+| retry | Agent 관찰 결과는 다시 실행하지 않는다. Agent 관찰 전에 생긴 harness 실패와 API 오류만 새 attempt 로 실행한다. 반복 단위당 최대 3회. 구독 사용 한도 도달(`usage_limit`)은 상한에 세지 않고 한도 해제 뒤 이어서 실행한다 | §7 |
 | 병렬 실행 | 실험 1 · 3 은 1개씩, 실험 2 는 2개씩 | §4.2 |
 | 실행 환경 고정 | 이미지 digest, 버전 확인, 환경 변수 허용 목록, 실행 조건 hash 와 실험 잠금 | §3, §4, §8.3 |
 
@@ -97,7 +97,7 @@ Agent 환경 변수 허용 목록:
 - 실험 기간에는 Docker Desktop 자동 갱신을 끄고, harness 를 `caffeinate -i` 아래에서 실행해 잠자기를 막는다
 - CPU 아키텍처는 `arm64` 다. 실험 3 기준 screenshot 은 같은 이미지에서 만든다(체크리스트 7단계)
 
-선행 조치: 2026-10-03 확인 시 Docker Desktop VM 메모리는 5.8GB(CPU 10)다. 실험 2 의 동시 2개 실행에 16GB 가 필요하므로 이미지 작업 전에 VM 메모리를 20GB 이상으로 바꾼다(체크리스트 3단계).
+선행 조치(완료, 2026-10-03): Docker Desktop VM 메모리를 6GB 에서 20GB 로 올렸다(`settings-store.json` 의 `MemoryMiB` 20480, 재시작 후 `docker info` 기준 20,943,294,464 bytes, CPU 10). 실험 2 의 동시 2개 실행에 16GB 가 필요하다. 실행 기계 후보로 사내 노드도 확인했고(lotecs-vm94 는 단일 thread 성능이 Mac 과 비슷하지만 메모리 11.6GB 에 공용 test-runner), 사용자 결정으로 Mac 을 유지했다.
 
 ## 4.2 컨테이너와 동시 실행
 
@@ -127,11 +127,13 @@ Gradle 읽기 전용 cache(`GRADLE_RO_DEP_CACHE`)와 Playwright 브라우저는 
 
 ## 4.4 인증
 
-- 사용자의 Claude Max 구독으로 실행한다. 실행 기계에서 `claude setup-token` 을 한 번 실행해 장기 인증 token 을 만들고, 실행자 shell 의 환경 변수 `CLAUDE_CODE_OAUTH_TOKEN` 에서 컨테이너로 `-e CLAUDE_CODE_OAUTH_TOKEN` 으로 넘긴다. 저장소, 이미지, 실행 설정 파일, `run.json`, fingerprint 에 값을 쓰지 않는다
-- 컨테이너에 `ANTHROPIC_API_KEY` 를 넘기지 않는다. 두 값이 함께 있으면 API key 로 인증될 수 있어 실행마다 인증 경로가 달라진다
-- 구독 사용 한도는 이 계정을 쓰는 모든 세션이 함께 쓴다. 실험 실행 중 같은 계정으로 하는 다른 Claude 작업이 실험 실행의 한도 도달 시점을 바꾼다. 실험 1 · 3 실행 중에는 같은 계정의 다른 대량 사용을 하지 않는다
+- 사용자의 Claude Max 구독으로 실행한다. 실행 기계에서 `claude setup-token` 을 한 번 실행해 장기 인증 token(유효기간 1년)을 만들고, 실행자 shell 의 환경 변수 `CLAUDE_CODE_OAUTH_TOKEN` 에서 컨테이너로 `-e CLAUDE_CODE_OAUTH_TOKEN` 으로 넘긴다. 저장소, 이미지, 실행 설정 파일, `run.json`, fingerprint 에 값을 쓰지 않는다(https://code.claude.com/docs/en/authentication 「Generate a long-lived token」)
+- `CLAUDE_CODE_OAUTH_TOKEN` 보다 우선하는 인증 수단을 Agent 환경에 두지 않는다. 우선순위는 `CLAUDE_CODE_USE_BEDROCK` · `VERTEX` · `FOUNDRY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_API_KEY`, `apiKeyHelper`, `CLAUDE_CODE_OAUTH_TOKEN` 순이고, `-p` 실행에서는 `ANTHROPIC_API_KEY` 가 있으면 항상 그 key 로 인증된다(같은 문서 「Authentication precedence」)
+- 준비 단계에서 Agent 와 같은 환경 변수와 `--settings` 로 `claude auth status --json` 을 실행해 `authMethod` 가 `oauth_token` 인지 확인한다. 다르거나 token 이 없으면 `harness_failed(prepare)` 다. 이 명령은 모델을 호출하지 않는다. Agent 의 설정 디렉터리를 비워 두려고 별도의 빈 설정 디렉터리에서 실행하고, 컨테이너 단계에서는 이미지 환경 변수까지 반영되도록 Agent 컨테이너 안에서 실행한다
+- **usage credits 를 끈다.** Max 구독은 사용 한도를 넘으면 usage credits 로 API 단가 과금을 이어갈 수 있고(기본값 꺼짐), 그때부터 prompt cache 수명이 1시간에서 5분으로 바뀐다(https://code.claude.com/docs/en/costs 「Why usage climbs」). 실험 도중 실행 조건이 바뀌므로, 실행자가 각 실험 시작 전 claude.ai Settings 의 Usage 에서 usage credits 가 꺼져 있는지 확인하고 확인 시각을 실험 기록에 남긴다
+- 구독 사용 한도는 이 계정을 쓰는 모든 세션이 함께 쓴다. 같은 계정의 다른 사용은 한도 도달 시점과 429 자동 재시도를 바꾼다. pilot 부터 실험 종료까지 실행이 진행되는 시간에는 같은 계정으로 다른 Claude 를 사용하지 않는다. 결과 보고에 Variant 별 `api_retries` 를 적는다
 - 사용 한도에 도달해 중단된 실행은 Agent 관찰이 아니다(§6.3). 한도가 풀리는 시각까지 다음 실행을 시작하지 않는다
-- Agent 는 Bash 로 환경 변수를 출력할 수 있으므로 원본 로그에 token 이 남을 수 있다. archive 전에 harness 가 원본에서 `sk-ant-` 문자열을 검색하고, 실험이 모두 끝나면 token 을 폐기한다
+- Agent 는 Bash 로 환경 변수를 출력할 수 있으므로 원본 로그에 token 이 남을 수 있다. archive 전에 harness 가 원본에서 `sk-ant-` 문자열을 검색하고, 실험이 모두 끝나면 token 을 폐기한다. setup-token 으로 만든 token 의 폐기 방법은 확인하지 않았다 [확인 필요, pilot 전]
 
 ## 4.5 이미지와 runtime
 
@@ -157,10 +159,10 @@ Gradle 읽기 전용 cache(`GRADLE_RO_DEP_CACHE`)와 Playwright 브라우저는 
 - `--max-budget-usd 15` 와 45분 시간 제한을 모든 Agent 실행과 통합 Agent 실행에 같게 쓴다. 구독 인증에서 이 값은 실제 청구가 아니라 Claude Code 가 계산한 비용 기준의 실행당 상한이다. 구독 인증에서 적용되는지는 pilot 에서 확인한다(§10)
 - 한도에 도달해 끝난 실행은 Agent 관찰 결과다. `agent_failed`, `error_kind = budget_exceeded` 로 기록하고 다시 실행하지 않는다. 결과 보고에 Variant 별 `budget_exceeded` 건수를 적는다
 
-실행당 예상 비용은 [추정] USD 2 ~ 6 이다. 가정: 45분 안에 80 turn, 평균 context 60k token. cache read 4.8M token × $0.20 = $0.96, cache write 0.24M token × $5.00 = $1.20, 출력 0.04M token × $20 = $0.80. 단가는 `claude-opus-5-5` 의 입력 $4, 출력 $20, cache read $0.20, 5분 cache write $5 / MTok(https://platform.claude.com/docs/en/about-claude/pricing)이다.
-한도 15는 추정 상단의 2.5배다. 정상 실행이 한도에 걸려 잘리는 것을 막으면서 이상 실행의 비용을 제한한다.
+실행당 예상 계산 비용은 [추정] USD 2 ~ 7 이다. 가정: 45분 안에 80 turn, 평균 context 60k token. cache read 4.8M token × $0.20 = $0.96, cache write 0.24M token × $8.00 = $1.92, 출력 0.04M token × $20 = $0.80. 단가는 `claude-opus-5-5` 의 입력 $4, 출력 $20, cache read $0.20 / MTok(https://platform.claude.com/docs/en/about-claude/pricing)이다. 구독의 prompt cache 수명은 1시간이라 1시간 cache write 단가를 쓰며, 그 단가를 입력 단가의 2배로 가정했다(확인하지 않음).
+한도 15는 추정 상단의 2배 이상이다. 정상 실행이 한도에 걸려 잘리는 것을 막으면서 이상 실행의 사용량을 제한한다.
 
-pilot 확인 규칙: pilot 실행 중 하나라도 비용이 한도의 50%(USD 7.5)를 넘거나 한도에 도달하면, 10단계 전에 한도를 올리고 §5.2 를 다시 계산해 §11 에 기록한다. 
+pilot 확인 규칙: pilot 실행 중 하나라도 계산 비용이 한도의 50%(USD 7.5)를 넘거나 한도에 도달하면, 10단계 전에 한도를 올리고 §5.2 의 일정을 다시 정해 §11 에 기록한다. 다시 정한 일정이 구독 사용 한도 안에서 실행할 수 없으면 실험을 시작하지 않고 사용자에게 결정을 요청한다.
 
 ## 5.2 전체 사용량
 
@@ -176,8 +178,9 @@ USD 예산 대신 구독 사용 한도 안에서 실행한다. 아래 세션 수
 | 실험 2 통합 Agent(회당 최대 7, 6회) | 42 |
 | 합계 | 122 |
 
-- 실행마다 `total_cost_usd`(Claude Code 가 계산한 API 기준 비용)와 token 을 기록해 사용량을 비교한다. 실제 청구는 없다
-- 구독 사용 한도의 구간 길이와 남은 양을 harness 가 읽는 방법은 확인하지 않았다. pilot 의 사용량으로 하루 실행 가능 수를 추정해 실험 일정(§7.1 순서 파일)을 정한다 [pilot 후 결정]
+- 실행마다 `total_cost_usd`(Claude Code 가 계산한 API 기준 비용)와 token 을 기록해 사용량을 비교한다. usage credits 를 끈 상태(§4.4)에서 실제 청구는 없다
+- 구독 사용 한도는 세션 한도(5시간마다 초기화), 주간 한도(계정마다 정해진 시각에 초기화), 모델별(Opus) 한도가 따로 있다(support.claude.com 「What is the Max plan?」, https://code.claude.com/docs/en/errors). 한도 도달 문구에 초기화 시각이 들어 있다
+- 남은 한도를 harness 가 실행 전에 읽는 방법은 확인하지 않았다. pilot 의 실행당 사용량으로 한 구간에 실행할 수 있는 수를 추정해 실험 일정(§7.1 순서 파일)을 정한다 [pilot 후 결정]
 - 한 실험은 사용 한도 도달로 중단되지 않게 나눠 실행할 수 있다. 실행 순서 파일의 순서는 바꾸지 않고 시작 시각만 미룬다
 
 # 6. 실행 상태 모델
@@ -219,8 +222,8 @@ USD 예산 대신 구독 사용 한도 안에서 실행한다. 아래 세션 수
 | CLI 버전 불일치, 필수 도구(java, node, pnpm, claude) 없음 | `harness_failed` | `prepare` |
 | Agent 실행 파일을 시작하지 못함 | `harness_failed` | `agent_start` |
 | Agent exit 0, `result` 성공 | `agent_succeeded` | `result` 줄이 없으면 exit code 로만 판정하고 `result_missing` 을 기록 |
-| Agent exit ≠ 0 또는 오류 `result` | `agent_failed` | `error_kind`: `budget_exceeded`, `api_error`, `other` |
-| 구독 사용 한도 도달로 중단(`api_error_status` 429 포함) | `agent_failed` | `error_kind = api_error`. Agent 관찰이 아니므로 새 attempt 대상이다. 한도가 풀릴 때까지 다음 실행을 시작하지 않는다 |
+| Agent exit ≠ 0 또는 오류 `result` | `agent_failed` | `error_kind`: `budget_exceeded`, `api_error`, `usage_limit`, `other` |
+| 구독 사용 한도 도달로 중단. 오류 result 의 `result` 문구나 stderr 줄이 `You've hit your <종류> limit` 으로 시작 | `agent_failed` | `error_kind = usage_limit`. Agent 관찰이 아니다. 한도가 풀린 뒤 같은 반복을 새 attempt 로 이어서 실행한다(§7) |
 | Agent 가 비정상 종료했고 컨테이너가 메모리 제한 초과로 종료됨(`docker inspect` 의 `State.OOMKilled`). Agent 가 exit 0 이면 이 행을 쓰지 않는다 | `agent_failed` | `error_kind = oom`. 메모리 제한은 실행 조건이므로 관찰 결과다 |
 | harness 가 보내지 않은 signal 로 종료했고 외부 원인 근거가 있음. 근거는 Docker daemon · VM 재시작 기록(`docker events`, `docker inspect` 의 `State.Error`)이나 잠자기 감지뿐이다 | `harness_failed` | `agent` |
 | harness 가 보내지 않은 signal 로 종료했고 외부 원인 근거가 없음 | `agent_failed` | `error_kind = signal`. Agent 가 Bash 로 보낸 signal 일 수 있어 관찰 결과로 본다. 마지막 Bash 명령을 함께 기록 |
@@ -280,6 +283,9 @@ USD 예산 대신 구독 사용 한도 안에서 실행한다. 아래 세션 수
 - `api_error` 판정 근거: `is_error` 인 result 의 `api_error_status`(HTTP 상태 숫자)가 429 이거나 500 이상. 보조로 오류 result 의 `subtype` · `error` · `errors`, `API Error:` 로 시작하는 `result` 문구와 stderr 줄. CLI 2.1.287 의 result schema 에 `api_error_status` 가 있는 것을 설치된 CLI 로 확인했다. Agent 가 쓴 그 밖의 문장과 stderr 는 보지 않는다
 - 새 attempt 는 같은 실험 · 과제 · Variant · 반복 번호, 새 실행 ID, `attempt + 1`, `retry_of = <이전 실행 ID>` 다. 실패한 attempt 바로 다음 순서에 실행한다
 - 반복 번호당 최대 3 attempt. 3번 모두 재실행 대상으로 끝나면 그 반복을 결측(`missing`)으로 기록하고 반복을 더하지 않는다. 결측 반복의 마지막 attempt 는 분석 데이터로 쓰지 않는다
+- `usage_limit` 로 끝난 attempt 는 3회 상한에 세지 않는다. harness 는 그 자리에서 멈추고, 일정 실행 단계가 한도 초기화 시각 뒤 같은 반복을 이어서 실행한다. 이어서 실행할 때 그 반복에서 이미 상한에 센 attempt 수를 harness 에 넘긴다. 주간 한도에 걸리면 며칠을 기다릴 수 있다
+- 실험이 끝날 때까지 이어서 실행하지 못해 마지막 attempt 가 `usage_limit` 인 반복은 결측이다
+- 분석 전에 `error_kind = other` 로 끝난 모든 실행의 result 문구와 stderr 를 사람이 확인해, 한도 · API 오류가 Agent 관찰로 잘못 분류된 실행이 없는지 본다
 - 재채점은 Agent 관찰을 바꾸지 않으므로 attempt 를 늘리지 않는다. 재채점 결과는 원래 실행 디렉터리 안에 따로 기록한다. 재채점 기능은 pilot 전에 구현한다(체크리스트 3단계)
 - 재채점 대상은 결과가 기록되지 않은 판정 묶음이다. 이미 결과가 기록된 판정 묶음은 그 뒤에 harness 예외가 나도 기록된 결과를 쓴다
 - 재채점도 첫 채점과 같이 source commit 을 새로 clone 하고 `final.patch` 를 적용한 복사본으로 한다(§6.2). `final.patch` 가 없으면(최종 diff 생성 실패) 보존된 작업 디렉터리에서 diff 를 먼저 다시 만든다
@@ -412,7 +418,7 @@ fingerprint 는 clone 전에 남겨 준비 단계 실패 실행에도 기록이 
 - subagent 가 `claude-opus-5-5` 로 실행되는지(`modelUsage`)
 - 구독 인증(`CLAUDE_CODE_OAUTH_TOKEN`)이 컨테이너 안 비대화 실행에서 동작하는지, `ANTHROPIC_API_KEY` 가 없을 때 구독으로 인증되는지
 - `--max-budget-usd` 가 구독 인증에서도 계산 비용 기준으로 적용되는지
-- 사용 한도 도달 시의 `api_error_status`, 오류 문구, 한도 해제 시각 표시 형식
+- 사용 한도 도달 시의 `api_error_status`, 오류 문구, 한도 해제 시각 표시 형식. pilot 10세션으로 한도에 닿지 않을 수 있으므로, 10단계 전에 한도에 닿은 상태에서 실행 1건을 일부러 시작해 실제 출력 형식이 `usage_limit` 로 분류되는지 확인한다
 - 인증 실패(401) · 권한 실패(403) 시의 `api_error_status` 와 종료 형식. 지금 규칙은 429 · 500 이상만 `api_error` 로 보고, 401 · 403 은 `other`(Agent 관찰)로 분류한다. 실행 환경 문제이므로 pilot 결과로 분류 규칙을 정한다
 - 사용자 전역 설정이 세션 기록에 나타나지 않는지(체크리스트 3단계 다음 단계 진입 조건)
 
@@ -432,6 +438,8 @@ fingerprint 는 clone 전에 남겨 준비 단계 실패 실행에도 기록이 
 | 2026-10-03 | `api_error_status` 판정 근거, `run.sh` 137 · 143 은 묶음 `error`, `running` 의 Agent 종료 기록 처리, 채점 · 과제 코드 잠금, 채점 직전 harness 코드 재확인, §8.2 디렉터리 표 | harness 골격 재확인(§12 5차) |
 | 2026-10-03 | 채점 직전 확인을 `lab/` tree · 변경 기록 hash 로, `running` 판정 조건, 분석 전 정규화 버전 통일, §8.2 잠금 · 정규화 입력 줄, pilot 확인 항목(401 · 403) | harness 골격 최종 확인(§12 6차) |
 | 2026-10-03 | 인증을 API key 에서 사용자의 Claude Max 구독(`CLAUDE_CODE_OAUTH_TOKEN`)으로 변경, USD 전체 예산을 구독 사용 한도 기준 실행 수로 변경, 사용 한도 도달 분류 | 사용자 결정 |
+| 2026-10-03 | 사용 한도 도달을 `usage_limit` 로 분리하고 재실행 상한에서 제외, 준비 단계 인증 수단 확인, usage credits 꺼짐 확인, 인증 우선순위 명시, 계산 비용 추정을 1시간 cache 기준으로, 같은 계정 사용 금지 범위 | 구독 인증 변경 독립 검토(§12 7차) |
+| 2026-10-03 | 인증 확인의 설정 디렉터리 분리와 `--settings` 전달, 이어서 실행할 때의 상한 계산, 이어가지 못한 `usage_limit` 반복의 결측 처리, §2 · §5.2 · §6.3 문구 | 구독 인증 변경 재확인(§12 8차) |
 
 ---
 
@@ -469,3 +477,9 @@ minor 4건 반영: 비종료 상태의 재채점 문구를 §7 조건으로 통�
 6차(Review B · C 최종 확인): Review B blocker 0 · major 0 · minor 4, Review C blocker 0 · major 0 · minor 3. 두 검토자 모두 FROZEN 에 동의했다(Review B 는 §8.2 두 줄 수정을 조건으로 했다). Review A 는 5차에서 동의했다. 남은 minor 7건은 위 변경 기록 행대로 반영했고, 401 · 403 분류는 §10 pilot 확인 항목으로 남겼다.
 
 6차 판정: blocker 0, major 0. 실행 계약을 다시 FROZEN 으로 정한다.
+
+7차(구독 인증 변경 독립 검토): blocker 0, major 2, minor 8. major 는 한도 도달 문구가 `api_error` 판정 근거에 없어 끊긴 실행이 Agent 관찰로 남는 것과, usage credits 가 켜져 있으면 실험 도중 과금 방식과 cache 수명이 바뀌는 것이다. 공식 문서(errors, authentication)로 문구와 인증 우선순위를 확인한 뒤 위 변경 기록 행대로 고쳤다.
+
+8차(같은 검토자의 재확인): 7차 major 2건 해소, blocker 0, major 0, minor 6. 검토자는 FROZEN 에 동의했다. minor 6건은 위 변경 기록 행대로 반영했다.
+
+8차 판정: blocker 0, major 0. 실행 계약을 다시 FROZEN 으로 정한다.

@@ -25,9 +25,9 @@
 설계 §19.2 에 해당한다. 1 ~ 2단계와 병행할 수 있고, **3단계 진입 전에 완료**한다.
 
 - [x] Claude 모델과 effort. 모델 학습 기준일과 설계 §3.4 의 major 출시일 관계를 함께 적는다
-- [x] 실행당 · 전체 예산
+- [x] 실행당 한도 · 전체 사용량(Claude Max 구독)
 - [x] 실행 기계(이 Mac 의 Docker 또는 Linux 노드)
-- [x] API 인증 방식(실험 전용 key, 예산 한도, 컨테이너에 넣는 방법)
+- [x] 인증 방식(Claude Max 구독 장기 token, 사용 한도, 컨테이너에 넣는 방법)
 - [x] 원본 로그 보관 위치
 - [x] timeout, retry, 병렬 실행, 실행 환경 고정 방법
   - 결정 위치: `_design/experiment-execution-contract-v0.1.md`(실행 계약). 설계 §19.2 는 각 항목의 결정 요약과 실행 계약 절을 가리킨다
@@ -92,7 +92,8 @@ Variant 보다 먼저 쓴다. 과제 문구도 이 단계에서 먼저 고정한
 - [x] harness 골격: 실행 단위(입력 spec), 실행 상태 모델, `run.json` · `result.json`, environment fingerprint, 채점 adapter, 재실행, 실험 잠금(실행 계약 §6 ~ §9)
   - 결과: `lab/harness/`. 가짜 process 시험 56개 통과(`pnpm test`). 독립 검토 A(실험 타당성) · B(재현성) · C(실패 의미) blocker 0, major 0. 실제 Claude 실행 명령은 컨테이너 항목과 함께 더한다
   - 완료 조건: 실제 Claude 호출 없이 가짜 process 로 정상 종료, Agent 비정상 종료, timeout, 채점 성공 · 실패, harness 내부 오류를 자동 시험으로 확인한다
-- [ ] Docker Desktop VM 메모리 20GB 이상, 실험 기간 자동 갱신 끄기(실행 계약 §4.1)
+- [x] Docker Desktop VM 메모리 20GB 이상(2026-10-03 완료, 실행 계약 §4.1)
+- [ ] 실험 기간 Docker Desktop 자동 갱신 끄기(실행 계약 §4.1)
 - [ ] 컨테이너 연결 경로: workspace, 빈 `CLAUDE_CONFIG_DIR`, hook 출력, 읽기 전용 `/opt/cc/` 만 연결(실행 계약 §4.3)
   - 완료 조건: 컨테이너 안의 환경 변수 · 연결 경로 · hostname · `/opt/cc/` 파일 내용에 `agentic`, `variant`, `실험`, `experiment`, Variant 코드가 없다
 - [ ] OOM · 외부 원인 종료 판정(`docker inspect`, `docker events`)과 재채점(`stage = after_agent` 실행을 source commit + `final.patch` 복사본으로 다시 채점, 최대 2회) (실행 계약 §6.3, §7)

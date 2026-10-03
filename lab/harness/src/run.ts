@@ -219,6 +219,22 @@ export async function executeRun(spec: RunSpec, opts: RunOptions): Promise<RunOu
       }
       const cli = extractVersion('claude', fp.agent_env.claude.output);
       if (cli !== config.agent.version) throw new HarnessError('prepare', `Claude Code 버전 ${cli} 가 실행 설정 ${config.agent.version} 과 다르다`);
+      // Agent 와 같은 환경 변수 · settings 로 인증 수단을 확인한다. 모델을 호출하지 않는다(실행 계약 §4.4).
+      // Agent 의 설정 디렉터리를 비워 두려고 별도의 빈 디렉터리를 쓴다
+      const settings = config.agent.settings_file === null ? [] : ['--settings', path.resolve(labRoot, config.agent.settings_file)];
+      const auth = await runProcess({
+        cmd: config.agent.executable, args: [...settings, 'auth', 'status', '--json'], cwd: runDir,
+        env: agentEnv(config, path.join(runDir, 'harness', 'auth-config'), process.env),
+        stdoutPath: path.join(runDir, RAW.prepare, 'auth-status.out'), stderrPath: path.join(runDir, RAW.prepare, 'auth-status.err'),
+        timeoutMs: 30_000, graceMs: t.grace, clock,
+      });
+      let method: unknown = null;
+      try {
+        method = (JSON.parse(readFileSync(path.join(runDir, RAW.prepare, 'auth-status.out'), 'utf8')) as { authMethod?: unknown }).authMethod;
+      } catch {
+        method = null;
+      }
+      if (auth.exit_code !== 0 || method !== 'oauth_token') throw new HarnessError('prepare', `Agent 인증 수단이 구독 token(oauth_token)이 아니다: ${String(method)}`);
       await cloneAt(spec.source.repo, spec.source.commit, workspace, step(RAW.prepare));
       await harnessGit(spec.source.repo, path.join(runDir, HARNESS_GIT), step(RAW.prepare));
     });
@@ -380,6 +396,11 @@ class Grader {
   }
 }
 
+// 사용 한도 도달은 Agent 관찰이 아니지만, 한도가 풀리기 전에 다시 실행해도 같은 결과다. 재실행 횟수에 세지 않고 멈춘다
+function usageLimited(result: { agent: { error_kind: string | null } | null }): boolean {
+  return result.agent?.error_kind === 'usage_limit';
+}
+
 interface RetryView {
   state: RunState | null;
   terminal: boolean;
@@ -389,7 +410,7 @@ interface RetryView {
 
 // 실행 계약 §7: 새 attempt 가 필요한 결과인지. API 오류를 먼저 본다. 비종료 상태로 남은 실행은 §6.2 의 stage 로 판정한다
 export function needsNewAttempt(result: RetryView): boolean {
-  if (result.agent?.outcome === 'agent_failed' && result.agent.error_kind === 'api_error') return true;
+  if (result.agent?.outcome === 'agent_failed' && (result.agent.error_kind === 'api_error' || result.agent.error_kind === 'usage_limit')) return true;
   // running 에 남았어도 Agent 종료 기록이 Agent 관찰(성공 · 실패 · 시간 초과)로 분류되면 Agent 관찰은 끝났다
   const observed = ['agent_succeeded', 'agent_failed', 'timed_out'].includes(result.agent?.outcome ?? '');
   const abandoned = result.state === 'running' && observed ? 'after_agent' : stageOfAbandoned(result.state);
@@ -398,15 +419,26 @@ export function needsNewAttempt(result: RetryView): boolean {
 }
 
 // 같은 반복 번호를 재실행 규칙에 따라 최대 max_attempts 번 실행한다. 이전 attempt 의 디렉터리는 남긴다.
-// 마지막 attempt 도 재실행 대상이면 그 반복은 결측이다(missing)
-export async function executeWithRetry(spec: RunSpec, opts: RunOptions): Promise<{ runs: RunOutcome[]; missing: boolean }> {
+// 마지막 attempt 도 재실행 대상이면 그 반복은 결측이다(missing).
+// 사용 한도에 도달하면 바로 멈추고 usageLimited 로 돌려준다. 한도가 풀린 뒤 같은 반복을 이어서 실행하는 것은 일정 실행 단계가 맡는다(실행 계약 §7)
+// 한도 해제 뒤 이어서 실행할 때는 resume 에 다음 attempt 번호, 직전 실행 ID, 이미 상한에 센 attempt 수를 준다
+export async function executeWithRetry(
+  spec: RunSpec,
+  opts: RunOptions,
+  resume: { attempt: number; retryOf: string; counted: number } | null = null,
+): Promise<{ runs: RunOutcome[]; missing: boolean; usageLimited: boolean }> {
   const runs: RunOutcome[] = [];
-  let retryOf: string | null = null;
-  for (let attempt = 1; attempt <= opts.config.retry.max_attempts; attempt++) {
+  let retryOf: string | null = resume?.retryOf ?? null;
+  let attempt = resume?.attempt ?? 1;
+  let counted = resume?.counted ?? 0;
+  while (counted < opts.config.retry.max_attempts) {
     const r = await executeRun({ ...spec, attempt, retryOf }, opts);
     runs.push(r);
-    if (!needsNewAttempt(r.result)) return { runs, missing: false };
+    if (usageLimited(r.result)) return { runs, missing: false, usageLimited: true };
+    if (!needsNewAttempt(r.result)) return { runs, missing: false, usageLimited: false };
+    counted++;
+    attempt++;
     retryOf = r.runId;
   }
-  return { runs, missing: true };
+  return { runs, missing: true, usageLimited: false };
 }

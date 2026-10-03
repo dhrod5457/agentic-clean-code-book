@@ -25,6 +25,20 @@ test('CLI 2.1.287 형식의 API 오류(is_error 와 api_error_status)를 API 오
   assert.deepEqual(classifyAgent(exited(1), stream({ subtype: 'success', is_error: true, api_error_status: 400 }), ''), { state: 'agent_failed', error_kind: 'other' });
 });
 
+test('구독 사용 한도 도달 문구(result 또는 stderr)는 usage_limit 이다', () => {
+  for (const kind of ['session', 'weekly', 'Opus', 'Sonnet']) {
+    const r = stream({ subtype: 'success', is_error: true, result: `You've hit your ${kind} limit · resets 3:45pm` });
+    assert.deepEqual(classifyAgent(exited(1), r, ''), { state: 'agent_failed', error_kind: 'usage_limit' }, kind);
+  }
+  assert.deepEqual(classifyAgent(exited(1), stream({ subtype: 'error', is_error: true }), "You've hit your weekly limit · resets Mon 12:00am\n"), { state: 'agent_failed', error_kind: 'usage_limit' });
+  // 오류가 아닌 result 의 문장은 보지 않는다
+  assert.deepEqual(classifyAgent(exited(1), stream({ subtype: 'success', is_error: false, result: "You've hit your session limit 라는 문구를 README 에 적었다" }), ''), { state: 'agent_failed', error_kind: 'other' });
+});
+
+test('Agent 실행 파일을 시작하지 못하면 harness_failed(agent_start) 다', () => {
+  assert.deepEqual(classifyAgent({ ...exited(0), exit_code: null, spawn_error: 'spawn x ENOENT' }, stream({}), ''), { state: 'harness_failed', stage: 'agent_start', reason: 'Agent 를 시작하지 못했다: spawn x ENOENT' });
+});
+
 test('Agent 단계에서 잠자기가 감지되면 Agent 결과와 관계없이 harness_failed(agent) 다', () => {
   assert.deepEqual(classifyAgent({ ...exited(0), suspended: true }, stream({ subtype: 'success' }), ''), { state: 'harness_failed', stage: 'agent', reason: 'host 잠자기 감지(wall 1000ms, monotonic 1000ms)' });
 });

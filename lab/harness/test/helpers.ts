@@ -9,6 +9,14 @@ import type { RunOptions } from '../src/run.ts';
 // 가짜 Agent · 가짜 채점 스크립트와 임시 저장소. 실제 Claude 와 Variant 애플리케이션 없이 orchestration 만 시험한다
 
 const created: string[] = [];
+// 시험의 가짜 Agent 는 구독 token 이 있어야 준비 단계 인증 확인을 통과한다.
+// 실행자 shell 의 실제 token 이 가짜 Agent 기록에 남지 않게 시험 값으로 덮어쓰고, 끝나면 되돌린다
+const hostToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+process.env.CLAUDE_CODE_OAUTH_TOKEN = 'oauth-test';
+process.on('exit', () => {
+  if (hostToken === undefined) delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  else process.env.CLAUDE_CODE_OAUTH_TOKEN = hostToken;
+});
 // 시험 process 가 끝나면 이 파일이 만든 임시 디렉터리를 지운다
 process.on('exit', () => {
   for (const dir of created) rmSync(dir, { recursive: true, force: true });
@@ -99,6 +107,8 @@ export function fixture(agentBody: string, graderBody = 'pass'): Fixture {
 
   const agent = writeScript(path.join(dir, 'fake-claude'), [
     'if [ "$1" = "--version" ]; then echo "2.1.287 (Claude Code)"; exit 0; fi',
+    // claude auth status --json 흉내: 구독 token 이 있고 API key 가 없을 때만 oauth_token
+    'if [ "$1" = "auth" ]; then if [ -n "$ANTHROPIC_API_KEY" ]; then m=api_key; elif [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then m=oauth_token; else m=none; fi; echo "{\\"loggedIn\\":true,\\"authMethod\\":\\"$m\\"}"; exit 0; fi',
     `printf '%s\\0' "$@" > "${argvFile}"`,
     `env > "${envFile}"`,
     `STREAM="${stream}"`,

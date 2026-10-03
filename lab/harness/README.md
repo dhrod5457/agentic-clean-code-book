@@ -31,13 +31,13 @@
 | `src/fingerprint.ts` | OS, 아키텍처, 익명 machine id, 도구 버전 |
 | `src/grader.ts` | `run.sh` 인자, JUnit 해석, 묶음 판정 |
 | `src/normalize.ts` | `run.json`, `raw/`, `artifacts/` 에서 `result.json` 생성 |
-| `src/run.ts` | 실행 1개 orchestration(`executeRun`), 실험 잠금, 재실행(`executeWithRetry`, 결측 표시) |
+| `src/run.ts` | 실행 1개 orchestration(`executeRun`), 실험 잠금, 재실행(`executeWithRetry`. 결측 표시, 구독 사용 한도 도달 시 멈춤) |
 
 ## 실행 1개의 흐름
 
 1. 입력 확인, 결과 root 가 Git 작업 트리 밖인지 확인, 집계 실험이면 `lab/` 미commit 변경이 없는지 확인, 실험 잠금(실행 조건, 과제 문구 · 채점 정의, Variant 별 source commit) 확인. 여기서 실패하면 실행 디렉터리를 만들지 않는다
 2. `runs/<run_id>/` 를 새로 만든다. 같은 ID 가 있으면 실패한다. `run.json` 기록
-3. 준비: fingerprint, Claude Code 버전 확인, source commit clone(`origin` · reflog 제거), diff 용 harness 소유 bare 저장소 → `prepared`
+3. 준비: fingerprint, Claude Code 버전 확인, 구독 인증 확인(`claude auth status --json` 의 `authMethod` 가 `oauth_token`), source commit clone(`origin` · reflog 제거), diff 용 harness 소유 bare 저장소 → `prepared`
 4. Agent 실행 → `running` → `agent_succeeded` · `agent_failed` · `timed_out`
 5. 최종 diff(`artifacts/final.patch`, harness 소유 git 과 임시 index 로 생성), 채점용 복사본(source commit + `final.patch`)
 6. 판정 묶음 채점 → `grading_succeeded` · `grading_failed`. 판정을 내지 못한 채점(port 사용 중, `run.sh` 시작 실패 · 외부 중단)은 `harness_failed` 이고 채점 결측이다
