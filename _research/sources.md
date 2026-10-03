@@ -1132,12 +1132,20 @@
 
 ### P6. EvoCode-Bench
 
+- URL:
+  - https://github.com/UniPat-AI/EvoCodeBench
+  - https://unipat.ai/benchmarks/EvoCode-Bench
 - Date: 2026
 - Scope: 26 stateful tasks, 227 rounds, persistent workspace 5~15 rounds
 - 핵심:
-  - 다수 Agent에서 single-round와 persistent multi-turn 성능 격차가 큼
+  - multi-round 동안 같은 workspace와 Agent session을 유지
+  - 2026-06-20 verifier integrity leak, contaminated task, 11개 task/test defect 수정 후 전체 benchmark 재실행
+  - 프로젝트가 이전 leaderboard/trajectory를 superseded로 명시
 - 책에서의 용도:
-  - 초기 benchmark 점수와 장기 evolution 성능의 차이
+  - persistent evolution benchmark
+  - verifier version/audit가 실험 결과에 미치는 영향
+- 주의:
+  - legacy paper runner의 이전 성능 수치를 현재 결과로 사용하지 않음
 
 ## Q. Requirement / Specification Quality
 
@@ -1355,6 +1363,7 @@
 
 ### U3. Predictive Test Selection Without Historical Failure Data
 
+- URL: https://conf.researchr.org/details/icsme-2026/icsme-2026-industry-track/14/Predictive-Test-Selection-Without-Historical-Failure-Data
 - Venue: ICSME 2026 Industry
 - 핵심:
   - historical failure label 없이 code/test co-evolution signal로 selection
