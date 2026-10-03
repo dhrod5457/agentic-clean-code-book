@@ -633,3 +633,48 @@
   - "정리해 달라고 했다고 실제 코드가 더 단순해지는 것은 아니다"
 - 책에서의 용도:
   - refactoring verification 필요성
+
+
+## L. 병렬 충돌 / 권한 경계 추가 자료
+
+### L1. AI Agent Pull Requests on GitHub: Frequency, Structure, and Merge Conflict Rates
+
+- URL: https://arxiv.org/abs/2607.04697
+- Date: 2026
+- Scope: AIDev-pop 33,596 PRs / 2,807 repositories
+- 핵심:
+  - Agent가 만든 PR의 동시 진행은 드문 예외가 아님
+  - 실제 three-way merge를 재현했을 때 cross-agent PR 쌍의 textual conflict가 41.7%, intra-agent는 19.8%
+  - 충돌 파일의 84.4%는 source code
+  - textual conflict만 측정한 것이므로 의미상의 충돌 비용은 포함하지 않음
+- 책에서의 쉬운 표현:
+  - "서로 다른 Agent가 각자 작업한 변경은 실제로 자주 부딪힌다"
+- 책에서의 용도:
+  - 중앙 공통 파일을 줄이는 원칙
+  - 병렬 Agent를 전제로 한 코드 구조
+
+### L2. Do Coding Agents Understand Least-Privilege Authorization?
+
+- URL: https://arxiv.org/abs/2605.14859
+- Date: 2026
+- Benchmark: AuthBench, 120 terminal tasks
+- 핵심:
+  - 최신 모델도 작업에 필요한 권한과 불필요한 권한을 동시에 정확하게 나누는 데 어려움
+  - 더 오래 reasoning한다고 자연스럽게 해결되지 않음
+  - 충분한 권한과 불필요한 권한 제거를 나누어 검사하는 방법이 효과적
+- 책에서의 쉬운 표현:
+  - "Agent에게 스스로 안전한 권한 범위를 정하라고 맡기지 않는다"
+- 책에서의 용도:
+  - 작업별 workspace / 최소 권한 / secret 분리
+
+### L3. Improving Code Localization with Repository Memory
+
+- URL: https://www.microsoft.com/en-us/research/publication/improving-code-localization-with-repository-memory/
+- Venue: ICLR 2026
+- 핵심:
+  - bug fixing에서 올바른 수정 위치를 찾는 것이 독립적인 난제
+  - commit history와 issue history를 repository memory로 활용하면 localization 개선 가능
+- 책에서의 쉬운 표현:
+  - "고칠 곳을 찾는 데도 저장소의 과거 경험이 도움이 된다"
+- 책에서의 용도:
+  - 검색 가능한 구조와 repository history의 가치
