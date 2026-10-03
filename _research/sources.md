@@ -829,3 +829,100 @@
   - "고칠 곳을 찾는 문제는 버그 수정뿐 아니라 성능 개선에서도 반복된다"
 - 책에서의 용도:
   - 코드 위치 찾기와 전체 실행 흐름 이해의 중요성
+
+
+## O. Worktree 최소화 / Shared Workspace / Hybrid Isolation
+
+### O1. Git — git-worktree Documentation
+
+- URL: https://git-scm.com/docs/git-worktree
+- 핵심:
+  - linked worktree는 repository 데이터를 공유하지만 `HEAD`, `index` 등은 worktree별로 분리
+  - worktree는 단순 별도 디렉터리가 아니라 Git working state isolation
+- 책에서의 용도:
+  - 같은 checkout에서 파일만 분리하면 Git write operation까지 안전하다는 오해 방지
+  - Worktree가 해결하는 문제와 code modularity가 해결하는 문제를 분리
+
+### O2. Claude Code — Run parallel sessions with worktrees
+
+- URL: https://code.claude.com/docs/en/worktrees
+- 핵심:
+  - parallel session의 file edit collision을 막기 위한 공식 isolation 방식
+  - worktree는 fresh checkout이므로 dependency/setup 초기화 필요
+  - subagent도 worktree isolation 가능
+- 책에서의 용도:
+  - 현재 Agent tooling에서 Worktree가 실용적인 기본 격리 수단이라는 근거
+  - 동시에 lifecycle/setup cost가 존재한다는 근거
+
+### O3. Anthropic — Building a C compiler with a team of parallel Claudes
+
+- URL: https://www.anthropic.com/engineering/building-c-compiler
+- Date: 2026-02-05
+- 핵심:
+  - 각 Agent를 Docker container + local clone으로 강하게 격리
+  - merge conflict는 여전히 빈번
+  - Linux kernel처럼 하나의 큰 sequential bottleneck에서는 16 Agent가 같은 문제에 몰려 병렬성 감소
+  - verifier를 이용해 서로 다른 파일/실패로 문제를 분해한 뒤 병렬성 회복
+- 책에서의 용도:
+  - isolation만으로 parallelism이 생기지 않는 실제 사례
+  - Independent Change Surface의 중요성
+
+### O4. AI Agent Pull Requests on GitHub: Frequency, Structure, and Merge Conflict Rates
+
+- URL: https://arxiv.org/abs/2607.04697
+- Date: 2026
+- Scope: 33,596 agent PRs / 2,807 repositories
+- 핵심:
+  - concurrent cross-agent PR textual conflict 41.7%
+  - intra-agent pair 19.8%
+  - conflicted files의 84.4%가 source code
+  - 약 42%가 modify/delete 또는 add/add structural conflict
+  - textual conflict만 측정한 하한
+- 책에서의 용도:
+  - Worktree는 development-time overwrite를 막아도 merge-time conflict를 제거하지 못한다는 근거
+  - Change isolation과 execution isolation의 구분
+
+### O5. CooperBench
+
+- URL: https://arxiv.org/abs/2601.13295
+- Project: https://cooperbench.com/
+- Date: 2026
+- 핵심:
+  - 652 collaborative coding tasks
+  - cooperative execution이 solo 대비 평균 약 30% 낮은 성공률
+  - communication이 conflict를 줄여도 전체 success를 충분히 회복하지 못함
+- 책에서의 용도:
+  - coordination channel을 늘리는 것보다 coordination requirement 자체를 줄이는 구조의 필요성
+
+### O6. AgentRoom: Concurrent Multi-Agent Coding in a CRDT-Backed Shared Workspace
+
+- URL: https://arxiv.org/abs/2608.23740
+- Date: 2026
+- 핵심:
+  - file claim, status, broadcast, CRDT shared filesystem을 사용한 shared-workspace 접근
+  - branch/worktree 후 merge 외의 multi-agent collaboration model을 실험
+- 책에서의 용도:
+  - shared workspace를 무조건 금지하지 않고 비교 실험 대상으로 두는 근거
+  - Full Isolation / Shared Ownership / Overlay 모델 비교
+
+### O7. Bazel — Hermeticity
+
+- URL: https://bazel.build/basics/hermeticity
+- 핵심:
+  - declared input/output 기반 isolation
+  - source tree에 output을 쓰는 build는 같은 source tree에서 다른 target build를 방해할 수 있음
+  - hermeticity는 reproducibility와 parallel execution을 지원
+- 책에서의 용도:
+  - shared workspace 가능 조건은 source file ownership뿐 아니라 build/test state isolation까지 포함해야 한다는 근거
+
+### O8. Nx — Affected Project Graph
+
+- URL:
+  - https://nx.dev/docs/features/ci-features/affected
+  - https://nx.dev/docs/kb/cipe-affected-project-graph
+- 핵심:
+  - changed file을 project/dependency graph에 연결해 최소 affected set 계산
+  - widely shared project/global input은 affected set을 크게 확장
+- 책에서의 용도:
+  - Task의 change scope와 dependency graph를 이용해 isolation level을 결정하는 scheduler 아이디어
+  - Hot File / Shared Modification Surface의 실행 가능한 예시
