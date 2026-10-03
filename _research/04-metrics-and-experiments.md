@@ -514,3 +514,31 @@ Worktree 여부와 별개로 병렬 변경을 합친 뒤 추가로 필요한:
 을 측정한다.
 
 이 지표들은 `18-worktree-minimization.md`의 Hybrid Isolation 실험과 연결한다.
+
+
+### 2.14 Reasoning Dependency Surface
+
+Agent가 한 변경을 만들기 위해 실제 판단 근거로 읽은 file/module/symbol 범위.
+
+~~~text
+RDS(task) = unique reasoning dependencies observed before write
+~~~
+
+단순 Files Changed보다 병렬 안전성을 더 잘 설명할 수 있는지 검증한다.
+
+함께 기록할 값:
+
+- readSet(A) ∩ writeSet(B)
+- cross-agent stale dependency count
+- contract invalidation count
+- shared boundary readers/writers
+- stale-write retry count
+
+### 2.15 Isolation Decision Accuracy
+
+Hybrid scheduler가 선택한 isolation level의 정확도를 본다.
+
+- False Safe: shared 실행을 선택했지만 충돌/오염 발생
+- False Isolation: worktree/container를 선택했지만 shared 실행도 안전했음
+
+목표는 Worktree 수 자체의 최소화가 아니라 성공률을 유지하면서 불필요한 isolation cost를 줄이는 것이다.
