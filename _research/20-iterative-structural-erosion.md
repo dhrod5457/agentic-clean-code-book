@@ -211,19 +211,32 @@ Agent가 코드를 만들었다고 그 코드가 "완료된 생성물"이 되는
 
 ---
 
-## 8. EvoCode-Bench — 지속 상태가 성능에 주는 영향
+## 8. EvoCode-Bench — 지속 상태 benchmark와 verifier integrity 문제
 
 출처:
 
-- EvoCode-Bench, 2026
+- EvoCode-Bench
+- https://github.com/UniPat-AI/EvoCodeBench
+- https://unipat.ai/benchmarks/EvoCode-Bench
+- 2026
 - 26 stateful tasks, 227 rounds
-- 각 workspace가 5~15 round 유지되는 persistent setting
+- 같은 workspace와 Agent session을 5~15 round 유지
 
-보고된 결과에서는 많은 Agent에서 single-round score가 persistent MT@4보다 22~40점 높았다.
+이 benchmark는 매 round마다 repository를 초기화하지 않고 이전 구현 결정, dependency, file layout, API choice가 다음 round에 그대로 남는 조건을 평가한다.
 
-즉 benchmark에서 한 번 잘하는 Agent가 장기 repository evolution에서도 같은 순위를 유지한다고 가정하면 안 된다.
+다만 이 자료는 **성능 수치보다 benchmark history 자체가 더 중요하다.**
 
----
+2026-06-20 프로젝트는 Harbor shared multi-step verifier mode의 evaluation-integrity leak, contaminated task 1개, task/test defect 11개를 수정한 뒤 benchmark 전체를 다시 실행했다. 프로젝트는 그 날짜 이전 leaderboard와 trajectory를 superseded로 명시한다.
+
+따라서 초기 paper/legacy runner의 MT@4 등 이전 수치를 현재 근거로 사용하지 않는다.
+
+### 연구 의미
+
+1. persistent workspace benchmark라는 설계는 장기 유지보수 연구에 직접 유용하다.
+2. 동시에 verifier defect 하나가 long-horizon 결과 전체를 오염시킬 수 있음을 보여준다.
+3. 장기 실험에서는 verifier version과 benchmark revision을 결과와 함께 고정해야 한다.
+
+이 사례는 `22-verifier-validity.md`의 주장과 직접 연결된다.
 
 ## 9. 기존 원칙에 미치는 영향
 
