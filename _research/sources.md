@@ -926,3 +926,144 @@
 - 책에서의 용도:
   - Task의 change scope와 dependency graph를 이용해 isolation level을 결정하는 scheduler 아이디어
   - Hot File / Shared Modification Surface의 실행 가능한 예시
+
+
+### O9. STORM — Multi-agent Collaboration with State Management
+
+- URL: https://arxiv.org/abs/2605.20563
+- Date: 2026
+- 핵심:
+  - Worktree 후 merge 대신 shared workspace에서 file read/write를 중재
+  - Agent가 읽은 file version snapshot을 기록하고 stale dependency가 있으면 write를 거부
+  - Manager만 최종 commit
+  - Commit0-Lite에서 GitWorktree baseline 대비 +18.7, PaperBench +1.4 보고
+- 책에서의 용도:
+  - shared workspace를 단순한 같은 폴더 사용이 아니라 optimistic concurrency control 문제로 재정의
+  - write set뿐 아니라 read dependency set이 병렬 안전성의 핵심이라는 근거
+
+### O10. CAID — Effective Strategies for Asynchronous Software Engineering Agents
+
+- URL: https://arxiv.org/abs/2603.21489
+- Date: 2026, v2 2026-07-08
+- 핵심:
+  - dependency-aware centralized planning
+  - isolated workspaces
+  - branch-and-merge
+  - executable verification
+  - single-agent 대비 PaperBench +25.6%p, Commit0 +14.7%p 보고
+- 책에서의 용도:
+  - Worktree isolation을 성급하게 폐기하지 않기 위한 반례
+  - isolation 자체보다 task decomposition과 integration protocol이 중요하다는 근거
+
+### O11. AgenticFlict
+
+- URL: https://arxiv.org/abs/2604.03551
+- Venue: AIware 2026
+- Scope:
+  - 142,652 Agentic PR
+  - 59,412 repositories
+  - 107,026 deterministic merge simulations
+- 핵심:
+  - textual conflict rate 27.67%
+  - conflicting PR 평균 4.36 files / 11.36 regions / 540.42 conflict lines
+- 책에서의 용도:
+  - Agent-generated contribution의 integration conflict가 실제로 무시하기 어려운 수준이라는 대규모 근거
+
+### O12. Understanding predictive factors for merge conflicts
+
+- URL: https://doi.org/10.1016/j.infsof.2020.106256
+- Date: 2020
+- Scope: 73,504 merge scenarios, 100 Ruby + 25 Python MVC projects
+- 핵심:
+  - non-modular contribution에서 conflict likelihood가 Ruby 6.13배, Python 4.39배 증가
+  - developers, commits, changed files가 많을수록 conflict와 연관
+  - 오래 지속된 contribution도 conflict와 연관
+- 책에서의 용도:
+  - Agent 병렬성을 위해 change locality와 modularity를 높이는 주장이 기존 실증 연구와 이어진다는 근거
+
+### O13. GitButler — Parallel Agents / Parallel Branches
+
+- URL:
+  - https://docs.gitbutler.com/ai-agents/parallel-agents
+  - https://docs.gitbutler.com/features/branch-management/virtual-branches
+- Date: 2026 docs
+- 핵심:
+  - 여러 Agent가 한 working directory에서 여러 branch를 동시에 사용 가능
+  - file/hunk change를 branch별로 배정하고 별도 staging 개념 제공
+  - filesystem, dependencies, generated files, runtime state는 공유
+  - incompatible checkout/runtime 또는 competing attempt는 Worktree 권장
+- 책에서의 용도:
+  - Full Worktree와 naive shared checkout 사이에 실제 제품화된 중간 모델이 존재한다는 근거
+
+### O14. VCBench — Version-Control Benchmark for Coding Agents
+
+- URL: https://vcbench.dev/
+- Source: https://github.com/gitbutlerapp/version-control-bench
+- Date: 2026-07-20 batch
+- 핵심:
+  - Git/Jujutsu/GitButler version-control task 비교
+  - 360 canonical runs 중 359 pass
+  - GitButler는 plain Git 대비 약 65% faster, 약 78% fewer VC commands 보고
+- 한계:
+  - GitButler가 관리하는 benchmark
+  - coding implementation benchmark 아님
+  - multi-agent concurrent edit safety를 직접 측정하지 않음
+- 책에서의 용도:
+  - Agent-facing VCS interface 자체도 tool-call/context 비용에 영향을 줄 수 있다는 자료
+
+### O15. Jujutsu — Concurrency and First-Class Conflicts
+
+- URL:
+  - https://jj-vcs.github.io/jj/latest/technical/concurrency/
+  - https://jj-vcs.github.io/jj/latest/conflicts/
+- 핵심:
+  - local concurrent operation을 lock으로 단순 직렬화하지 않고 divergent operation으로 모델링
+  - operation log를 통해 concurrent repository state를 merge
+  - conflict를 commit/state 안에 first-class로 보관 가능
+- 한계:
+  - Git backend/colocated concurrent use에는 문서상 알려진 caveat 존재
+- 책에서의 용도:
+  - Agent 시대 VCS가 concurrency-first 상태 모델을 가질 수 있다는 설계 참고
+
+### O16. Git — Alternate Index
+
+- URL:
+  - https://git-scm.com/docs/git
+  - https://git-scm.com/docs/git-read-tree
+- 핵심:
+  - GIT_INDEX_FILE로 alternate index 지정 가능
+  - read-tree가 temporary index 기반 tree operation 지원
+- 책에서의 용도:
+  - VCS index state와 filesystem working state를 별도 문제로 다뤄야 한다는 근거
+  - alternate index만으로 shared filesystem collision이 해결되지는 않음
+
+### O17. Buck2 — Isolation Directory
+
+- URL: https://buck2.build/docs/concepts/isolation_dir/
+- 핵심:
+  - 같은 source project에서 여러 independent daemon/build environment를 isolation directory로 분리 가능
+  - artifact/cache/build state를 별도 관리
+- 책에서의 용도:
+  - source checkout isolation과 build/runtime isolation을 분리 설계할 수 있다는 실제 사례
+
+### O18. Optimistic Concurrency Control
+
+- URL:
+  - https://doi.org/10.1145/319566.319567
+  - https://doi.org/10.1016/0306-4379(84)90020-6
+- Date: 1981 / 1984
+- 핵심:
+  - conflict가 드문 상황에서는 lock을 선점하기보다 optimistic execution 후 validation/retry 가능
+- 책에서의 용도:
+  - Agent shared workspace를 optimistic concurrency, Worktree/lease를 pessimistic isolation으로 비교하는 이론적 틀
+
+### O19. Git Sparse Checkout + Worktree Cost
+
+- URL:
+  - https://git-scm.com/docs/git-worktree
+  - https://git-scm.com/docs/sparse-checkout
+- 핵심:
+  - linked worktree는 대부분 repository data를 공유하며 full clone과 다름
+  - sparse-checkout 설정은 worktree별로 관리 가능
+- 책에서의 용도:
+  - Worktree를 줄이는 전략과 Worktree 자체를 저비용화하는 전략을 별도로 비교해야 한다는 반론 근거
