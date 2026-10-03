@@ -678,3 +678,68 @@
   - "고칠 곳을 찾는 데도 저장소의 과거 경험이 도움이 된다"
 - 책에서의 용도:
   - 검색 가능한 구조와 repository history의 가치
+
+
+## M. 원칙 반론 검토 자료
+
+### M1. Coding Agents are Effective Long-Context Processors
+
+- URL: https://arxiv.org/abs/2603.20432
+- Date: 2026
+- 핵심:
+  - Coding Agent가 file system, shell, code execution을 이용하면 매우 큰 자료도 효과적으로 처리할 수 있음
+  - 단순히 context window 안에 모든 내용을 넣는 방식과 다른 결과
+- 책에서의 의미:
+  - "Agent는 긴 코드를 못 읽으니 무조건 작게 쪼개야 한다"는 주장의 반례
+  - locality는 모델 한계가 아니라 탐색 비용과 변경 경계 관점에서 설명해야 함
+
+### M2. The Limits of Long-Context Reasoning in Automated Bug Fixing
+
+- URL: https://arxiv.org/abs/2602.16069
+- Date: 2026
+- 핵심:
+  - SWE-bench 기반 실험에서 긴 context를 직접 넣었을 때 성능 저하
+  - 성공한 agent trajectory는 비교적 짧은 context 단계로 진행되는 경향
+- 책에서의 의미:
+  - 큰 context window가 repository 구조의 필요성을 자동으로 없애지는 않음
+  - M1과 함께 읽어야 함
+
+### M3. Beyond Cohesion and Coupling
+
+- URL: https://doi.org/10.1145/3707452
+- Venue: ACM TOSEM
+- Date: 2025
+- 핵심:
+  - cohesion/coupling만으로 사람이 이해하기 좋은 module decomposition을 충분히 설명하기 어려움
+  - control flow 등 추가 기준이 필요
+- 책에서의 의미:
+  - "결합도만 낮추면 좋은 Agentic 구조"라는 단순화 방지
+  - metric을 목표로 삼아 구조를 억지로 쪼개지 않기 위한 반례
+
+### M4. Martin Fowler — Monolith First
+
+- URL: https://martinfowler.com/bliki/MonolithFirst.html
+- 핵심:
+  - 좋은 service boundary를 초기에 정확히 잡기 어려움
+  - 너무 일찍 강한 경계를 만들면 refactoring 비용 증가
+  - coarse-grained structure에서 시작해 실제 경험으로 경계를 찾는 전략
+- 책에서의 의미:
+  - Agent 병렬성을 이유로 premature decomposition을 하지 않는 근거
+
+### M5. Martin Fowler — Microservice Trade-Offs
+
+- URL: https://martinfowler.com/articles/microservice-trade-offs.html
+- 핵심:
+  - strong module boundary의 장점과 distributed system cost를 함께 설명
+  - module boundary를 얻기 위해 반드시 microservice가 필요한 것은 아님
+- 책에서의 의미:
+  - "독립 작업 = 독립 서비스"라는 잘못된 결론 방지
+
+### M6. Modular Monolith Architecture in Cloud Environments: A Systematic Literature Review
+
+- URL: https://doi.org/10.3390/fi17110496
+- Date: 2025
+- 핵심:
+  - modular monolith의 단순성, 유지보수성 장점과 scalability/resilience 한계를 함께 정리
+- 책에서의 의미:
+  - Agentic Clean Code를 특정 architecture style로 고정하지 않기 위한 자료
