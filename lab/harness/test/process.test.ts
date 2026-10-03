@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { runProcess, type Clock } from '../src/process.ts';
@@ -13,13 +14,17 @@ function opts(dir: string, script: string, timeoutMs: number) {
   };
 }
 
+// 종료됐지만 아직 회수되지 않은 zombie 는 죽은 것으로 본다. init 없이 node 가 PID 1 인 컨테이너에서는 zombie 가 회수되지 않고 남는다
 function alive(pid: number): boolean {
   try {
     process.kill(pid, 0);
-    return true;
   } catch {
     return false;
   }
+  const state = existsSync(`/proc/${pid}/stat`)
+    ? readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ').at(-1)?.[0]
+    : spawnSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8' }).stdout.trim()[0];
+  return state !== 'Z';
 }
 
 test('stdout 은 바이트 그대로 저장하고 수신 시각은 줄마다 별도 파일에 쓴다', async () => {
