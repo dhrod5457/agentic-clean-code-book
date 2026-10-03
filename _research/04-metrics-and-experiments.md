@@ -469,3 +469,76 @@ Agent가 flaky signal에서 얼마나 불필요한 수정/retry를 하는지 관
 > **Agentic Clean Code의 품질은 source code가 얼마나 예쁜지가 아니라, 올바른 변경을 수행하기 위해 필요한 탐색·context·coordination·verification의 총비용으로 측정할 수 있다.**
 
 이 명제를 다음 리서치와 실제 실험을 통해 깨뜨릴 수 있어야 한다.
+
+
+---
+
+## 12.13 Worktree Avoidability / Isolation Metric
+
+병렬 Agent에서 모든 Task에 같은 수준의 격리를 강제하는 대신, 코드베이스가 얼마나 많은 Task를 낮은 isolation level에서 안전하게 실행할 수 있는지 측정한다.
+
+### Worktree Avoidability Rate
+
+```
+worktree 없이 안전하게 실행 가능한 edit task
+/
+전체 edit task
+```
+
+### Isolation Escalation Rate
+
+```
+shared execution 후보였으나 worktree/container로 승격된 task
+/
+shared execution 후보 task
+```
+
+### Shared Workspace Collision Rate
+
+```
+shared workspace에서 file/runtime/state 충돌이 발생한 task pair
+/
+shared workspace 병렬 task pair
+```
+
+### Integration Repair Cost
+
+Worktree 여부와 별개로 병렬 변경을 합친 뒤 추가로 필요한:
+
+- Agent turns
+- files changed
+- test runs
+- tokens
+- elapsed time
+
+을 측정한다.
+
+이 지표들은 `18-worktree-minimization.md`의 Hybrid Isolation 실험과 연결한다.
+
+
+### 2.14 Reasoning Dependency Surface
+
+Agent가 한 변경을 만들기 위해 실제 판단 근거로 읽은 file/module/symbol 범위.
+
+~~~text
+RDS(task) = unique reasoning dependencies observed before write
+~~~
+
+단순 Files Changed보다 병렬 안전성을 더 잘 설명할 수 있는지 검증한다.
+
+함께 기록할 값:
+
+- readSet(A) ∩ writeSet(B)
+- cross-agent stale dependency count
+- contract invalidation count
+- shared boundary readers/writers
+- stale-write retry count
+
+### 2.15 Isolation Decision Accuracy
+
+Hybrid scheduler가 선택한 isolation level의 정확도를 본다.
+
+- False Safe: shared 실행을 선택했지만 충돌/오염 발생
+- False Isolation: worktree/container를 선택했지만 shared 실행도 안전했음
+
+목표는 Worktree 수 자체의 최소화가 아니라 성공률을 유지하면서 불필요한 isolation cost를 줄이는 것이다.
